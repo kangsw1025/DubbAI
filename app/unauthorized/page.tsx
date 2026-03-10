@@ -1,3 +1,7 @@
+"use client";
+
+import { signOut } from "next-auth/react";
+
 export default function UnauthorizedPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -8,12 +12,12 @@ export default function UnauthorizedPage() {
           <br />
           접근 권한이 없는 계정입니다.
         </p>
-        <a
-          href="/api/auth/signin"
+        <button
+          onClick={() => signOut({ callbackUrl: "/" })}
           className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
           다른 계정으로 로그인
-        </a>
+        </button>
       </div>
     </div>
   );

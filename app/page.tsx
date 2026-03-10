@@ -52,7 +52,9 @@ export default function Home() {
       setTranscript(data.transcript);
       setTranslation(data.translation);
 
-      const audioBytes = Uint8Array.from(atob(data.audio), (c) => c.charCodeAt(0));
+      const audioBytes = Uint8Array.from(atob(data.audio), (c) =>
+        c.charCodeAt(0),
+      );
       const blob = new Blob([audioBytes], { type: "audio/mpeg" });
       setResultUrl(URL.createObjectURL(blob));
     } catch (err) {
@@ -78,7 +80,9 @@ export default function Home() {
           <h1 className="text-2xl font-bold text-gray-900">DubbAI</h1>
           {session ? (
             <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-500">{session.user?.email}</span>
+              <span className="text-sm text-gray-500">
+                {session.user?.email}
+              </span>
               <button
                 onClick={() => signOut()}
                 className="text-sm text-red-500 hover:underline"
@@ -88,7 +92,7 @@ export default function Home() {
             </div>
           ) : (
             <button
-              onClick={() => signIn("google")}
+              onClick={() => signIn("google", { callbackUrl: "/" })}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
             >
               Google 로그인
@@ -101,11 +105,17 @@ export default function Home() {
       <main className="max-w-3xl mx-auto px-4 py-12">
         {!session ? (
           <div className="text-center py-20">
-            <h2 className="text-3xl font-bold text-gray-800 mb-4">AI 더빙 서비스</h2>
-            <p className="text-gray-500 mb-2">오디오 또는 비디오 파일을 업로드하면</p>
-            <p className="text-gray-500 mb-8">원하는 언어로 더빙된 결과물을 제공합니다.</p>
+            <h2 className="text-3xl font-bold text-gray-800 mb-4">
+              AI 더빙 서비스
+            </h2>
+            <p className="text-gray-500 mb-2">
+              오디오 또는 비디오 파일을 업로드하면
+            </p>
+            <p className="text-gray-500 mb-8">
+              원하는 언어로 더빙된 결과물을 제공합니다.
+            </p>
             <button
-              onClick={() => signIn("google")}
+              onClick={() => signIn("google", { callbackUrl: "/" })}
               className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-lg"
             >
               Google로 시작하기
@@ -113,7 +123,9 @@ export default function Home() {
           </div>
         ) : (
           <div className="bg-white rounded-xl shadow-sm p-8">
-            <h2 className="text-xl font-semibold text-gray-800 mb-6">파일 더빙</h2>
+            <h2 className="text-xl font-semibold text-gray-800 mb-6">
+              파일 더빙
+            </h2>
 
             {/* File upload */}
             <div
@@ -124,8 +136,12 @@ export default function Home() {
                 <p className="text-gray-700 font-medium">{file.name}</p>
               ) : (
                 <>
-                  <p className="text-gray-500">오디오 또는 비디오 파일 클릭하여 업로드</p>
-                  <p className="text-sm text-gray-400 mt-1">MP3, MP4, WAV, MOV 등 지원</p>
+                  <p className="text-gray-500">
+                    오디오 또는 비디오 파일 클릭하여 업로드
+                  </p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    MP3, MP4, WAV, MOV 등 지원
+                  </p>
                 </>
               )}
               <input
@@ -181,12 +197,16 @@ export default function Home() {
             {transcript && (
               <div className="mt-6 space-y-3">
                 <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-xs font-medium text-gray-500 mb-1">원본 텍스트</p>
+                  <p className="text-xs font-medium text-gray-500 mb-1">
+                    원본 텍스트
+                  </p>
                   <p className="text-sm text-gray-700">{transcript}</p>
                 </div>
                 {translation && (
                   <div className="p-4 bg-blue-50 rounded-lg">
-                    <p className="text-xs font-medium text-blue-500 mb-1">번역 텍스트</p>
+                    <p className="text-xs font-medium text-blue-500 mb-1">
+                      번역 텍스트
+                    </p>
                     <p className="text-sm text-blue-700">{translation}</p>
                   </div>
                 )}
@@ -196,7 +216,9 @@ export default function Home() {
             {/* Result */}
             {resultUrl && (
               <div className="mt-6 p-4 bg-green-50 rounded-lg">
-                <p className="text-sm font-medium text-green-800 mb-3">더빙 완료!</p>
+                <p className="text-sm font-medium text-green-800 mb-3">
+                  더빙 완료!
+                </p>
                 <audio controls src={resultUrl} className="w-full mb-3" />
                 <a
                   href={resultUrl}
