@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"npx create-next-app@latest . --typescript --eslint --tailwind --app --no-src-dir --import-alias \\\"@/*\\\" --yes 2>&1\",\"timeout\":120000}",
-  "error": "Exit code 1\nnpm warn exec The following package was not found and will be installed: create-next-app@16.1.6\nCould not create a project called \"DubbAI\" because of npm naming restrictions:\n    * name can no longer contain capital letters",
-  "timestamp": "2026-03-10T18:09:46.165Z",
-  "retry_count": 1
-}
