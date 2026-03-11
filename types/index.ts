@@ -8,6 +8,7 @@ export type DubbingStatus =
   | "idle"
   | "extracting"
   | "processing"
+  | "muxing"
   | "success"
   | "error";
 
@@ -20,5 +21,6 @@ export interface DubbingFormProps {
 export interface DubbingResultProps {
   transcript: string;
   translation: string;
-  audioUrl: string;
+  mediaUrl: string;
+  isVideo: boolean;
 }

@@ -8,7 +8,14 @@ import { useDubbing } from "@/hooks/useDubbing";
 
 export default function Home() {
   const { data: session, status } = useSession();
-  const { status: dubbingStatus, result, audioUrl, error, dub } = useDubbing();
+  const {
+    status: dubbingStatus,
+    result,
+    mediaUrl,
+    isVideo,
+    error,
+    dub,
+  } = useDubbing();
 
   if (status === "loading") {
     return (
@@ -50,7 +57,9 @@ export default function Home() {
             <DubbingForm
               onSubmit={dub}
               isProcessing={
-                dubbingStatus === "extracting" || dubbingStatus === "processing"
+                dubbingStatus === "extracting" ||
+                dubbingStatus === "processing" ||
+                dubbingStatus === "muxing"
               }
               dubbingStatus={dubbingStatus}
             />
@@ -61,11 +70,12 @@ export default function Home() {
               </div>
             )}
 
-            {dubbingStatus === "success" && result && audioUrl && (
+            {dubbingStatus === "success" && result && mediaUrl && (
               <DubbingResult
                 transcript={result.transcript}
                 translation={result.translation}
-                audioUrl={audioUrl}
+                mediaUrl={mediaUrl}
+                isVideo={isVideo}
               />
             )}
           </div>

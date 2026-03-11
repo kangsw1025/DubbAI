@@ -2,7 +2,7 @@
 
 import type { DubbingResultProps } from "@/types";
 
-export function DubbingResult({ transcript, translation, audioUrl }: DubbingResultProps) {
+export function DubbingResult({ transcript, translation, mediaUrl, isVideo }: DubbingResultProps) {
   return (
     <div className="mt-6 space-y-4">
       {/* Transcript */}
@@ -17,16 +17,20 @@ export function DubbingResult({ transcript, translation, audioUrl }: DubbingResu
         <p className="text-sm text-blue-700">{translation}</p>
       </div>
 
-      {/* Audio player + download */}
+      {/* Media player + download */}
       <div className="p-4 bg-green-50 rounded-lg">
         <p className="text-sm font-medium text-green-800 mb-3">더빙 완료!</p>
-        <audio controls src={audioUrl} className="w-full mb-3" />
+        {isVideo ? (
+          <video controls src={mediaUrl} className="w-full mb-3 rounded" />
+        ) : (
+          <audio controls src={mediaUrl} className="w-full mb-3" />
+        )}
         <a
-          href={audioUrl}
-          download="dubbed.mp3"
+          href={mediaUrl}
+          download={isVideo ? "dubbed.mp4" : "dubbed.mp3"}
           className="inline-block px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
         >
-          다운로드
+          {isVideo ? "더빙 영상 다운로드" : "더빙 오디오 다운로드"}
         </a>
       </div>
     </div>

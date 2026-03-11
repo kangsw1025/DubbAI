@@ -85,9 +85,11 @@ export function DubbingForm({
       >
         {dubbingStatus === "extracting"
           ? "오디오 추출 중..."
-          : isProcessing
-            ? "더빙 처리 중..."
-            : "더빙 시작"}
+          : dubbingStatus === "muxing"
+            ? "영상 합성 중..."
+            : isProcessing
+              ? "더빙 처리 중..."
+              : "더빙 시작"}
       </button>
     </div>
   );

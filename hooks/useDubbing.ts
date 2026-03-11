@@ -6,21 +6,26 @@ import type { DubbingResult, DubbingStatus } from "@/types";
 export function useDubbing() {
   const [status, setStatus] = useState<DubbingStatus>("idle");
   const [result, setResult] = useState<DubbingResult | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [isVideo, setIsVideo] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const dub = async (file: File, targetLanguage: string) => {
     setStatus("processing");
     setError(null);
     setResult(null);
-    setAudioUrl(null);
+    setMediaUrl(null);
+
+    const fileIsVideo = file.type.startsWith("video/");
+    setIsVideo(fileIsVideo);
 
     let audioFile = file;
-    if (file.type.startsWith("video/")) {
+    if (fileIsVideo) {
       setStatus("extracting");
       try {
-        const { extractAudioFromVideo } =
-          await import("@/lib/utils/extractAudioClient");
+        const { extractAudioFromVideo } = await import(
+          "@/lib/utils/extractAudioClient"
+        );
         audioFile = await extractAudioFromVideo(file);
       } catch {
         setError("비디오에서 오디오 추출에 실패했습니다.");
@@ -47,8 +52,25 @@ export function useDubbing() {
       const audioBytes = Uint8Array.from(atob(data.audio), (c) =>
         c.charCodeAt(0),
       );
-      const blob = new Blob([audioBytes], { type: "audio/mpeg" });
-      setAudioUrl(URL.createObjectURL(blob));
+      const dubbedBlob = new Blob([audioBytes], { type: "audio/mpeg" });
+
+      if (fileIsVideo) {
+        setStatus("muxing");
+        try {
+          const { muxAudioToVideo } = await import(
+            "@/lib/utils/muxAudioToVideo"
+          );
+          const videoFile = await muxAudioToVideo(file, dubbedBlob);
+          setMediaUrl(URL.createObjectURL(videoFile));
+        } catch {
+          // muxing 실패 시 오디오만 제공
+          setMediaUrl(URL.createObjectURL(dubbedBlob));
+          setIsVideo(false);
+        }
+      } else {
+        setMediaUrl(URL.createObjectURL(dubbedBlob));
+      }
+
       setStatus("success");
     } catch (err) {
       setError(err instanceof Error ? err.message : "알 수 없는 오류");
@@ -59,9 +81,10 @@ export function useDubbing() {
   const reset = () => {
     setStatus("idle");
     setResult(null);
-    setAudioUrl(null);
+    setMediaUrl(null);
+    setIsVideo(false);
     setError(null);
   };
 
-  return { status, result, audioUrl, error, dub, reset };
+  return { status, result, mediaUrl, isVideo, error, dub, reset };
 }
