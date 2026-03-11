@@ -31,16 +31,22 @@ export async function muxAudioToVideo(
   await ffmpeg.writeFile("dubbed.mp3", await fetchFile(dubbedAudioBlob));
 
   await ffmpeg.exec([
-    "-i", inputName,
-    "-i", "dubbed.mp3",
-    "-map", "0:v:0",
-    "-map", "1:a:0",
-    "-c:v", "copy",
-    "-shortest",
+    "-i",
+    inputName,
+    "-i",
+    "dubbed.mp3",
+    "-map",
+    "0:v:0",
+    "-map",
+    "1:a:0",
+    "-c:v",
+    "copy",
     "-y",
     outputName,
   ]);
 
   const data = await ffmpeg.readFile(outputName);
-  return new File([data as BlobPart], `dubbed.${ext}`, { type: videoFile.type });
+  return new File([data as BlobPart], `dubbed.${ext}`, {
+    type: videoFile.type,
+  });
 }
