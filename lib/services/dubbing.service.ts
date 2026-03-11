@@ -19,15 +19,8 @@ export async function dubFile(
   try {
     await writeFile(inputPath, fileBuffer);
 
-    const isVideo = fileType.startsWith("video/");
-    if (isVideo) {
-      try {
-        audioPath = await extractAudioFromVideo(inputPath);
-      } catch {
-        throw new Error(
-          "비디오 파일은 현재 지원되지 않습니다. MP3, WAV 등 오디오 파일을 업로드해주세요.",
-        );
-      }
+    if (fileType.startsWith("video/")) {
+      audioPath = await extractAudioFromVideo(inputPath);
     }
 
     const audioFilePath = audioPath ?? inputPath;

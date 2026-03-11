@@ -15,8 +15,23 @@ export function useDubbing() {
     setResult(null);
     setAudioUrl(null);
 
+    let audioFile = file;
+    if (file.type.startsWith("video/")) {
+      setStatus("extracting");
+      try {
+        const { extractAudioFromVideo } =
+          await import("@/lib/utils/extractAudioClient");
+        audioFile = await extractAudioFromVideo(file);
+      } catch {
+        setError("비디오에서 오디오 추출에 실패했습니다.");
+        setStatus("error");
+        return;
+      }
+      setStatus("processing");
+    }
+
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", audioFile);
     formData.append("targetLanguage", targetLanguage);
 
     try {
@@ -29,7 +44,9 @@ export function useDubbing() {
 
       setResult(data);
 
-      const audioBytes = Uint8Array.from(atob(data.audio), (c) => c.charCodeAt(0));
+      const audioBytes = Uint8Array.from(atob(data.audio), (c) =>
+        c.charCodeAt(0),
+      );
       const blob = new Blob([audioBytes], { type: "audio/mpeg" });
       setAudioUrl(URL.createObjectURL(blob));
       setStatus("success");

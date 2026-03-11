@@ -13,7 +13,11 @@ const LANGUAGES = [
   { code: "ES", label: "스페인어" },
 ];
 
-export function DubbingForm({ onSubmit, isProcessing }: DubbingFormProps) {
+export function DubbingForm({
+  onSubmit,
+  isProcessing,
+  dubbingStatus,
+}: DubbingFormProps) {
   const [file, setFile] = useState<File | null>(null);
   const [targetLanguage, setTargetLanguage] = useState("EN-US");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -79,7 +83,11 @@ export function DubbingForm({ onSubmit, isProcessing }: DubbingFormProps) {
         disabled={!file || isProcessing}
         className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {isProcessing ? "더빙 처리 중..." : "더빙 시작"}
+        {dubbingStatus === "extracting"
+          ? "오디오 추출 중..."
+          : isProcessing
+            ? "더빙 처리 중..."
+            : "더빙 시작"}
       </button>
     </div>
   );
