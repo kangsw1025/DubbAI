@@ -36,6 +36,7 @@ yarn-error.log*
 # Claude Code / AI agent files
 .claude/
 .omc/
+.bkit/
 docs/.bkit-memory.json
 docs/.pdca-status.json
 
