@@ -36,8 +36,12 @@ export function DubbingForm({ onSubmit, isProcessing }: DubbingFormProps) {
           <p className="text-gray-700 font-medium">{file.name}</p>
         ) : (
           <>
-            <p className="text-gray-500">오디오 또는 비디오 파일 클릭하여 업로드</p>
-            <p className="text-sm text-gray-400 mt-1">MP3, MP4, WAV, MOV 등 지원</p>
+            <p className="text-gray-500">
+              오디오 또는 비디오 파일 클릭하여 업로드
+            </p>
+            <p className="text-sm text-gray-400 mt-1">
+              MP3, MP4, WAV, MOV 등 지원
+            </p>
           </>
         )}
         <input
@@ -59,7 +63,7 @@ export function DubbingForm({ onSubmit, isProcessing }: DubbingFormProps) {
           value={targetLanguage}
           onChange={(e) => setTargetLanguage(e.target.value)}
           aria-label="타겟 언어 선택"
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {LANGUAGES.map((lang) => (
             <option key={lang.code} value={lang.code}>

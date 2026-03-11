@@ -10,7 +10,7 @@ export async function dubFile(
   fileBuffer: Buffer,
   filename: string,
   fileType: string,
-  targetLanguage: string
+  targetLanguage: string,
 ): Promise<DubbingResult> {
   const timestamp = Date.now();
   const inputPath = join(tmpdir(), `dubbai-input-${timestamp}-${filename}`);
@@ -21,7 +21,13 @@ export async function dubFile(
 
     const isVideo = fileType.startsWith("video/");
     if (isVideo) {
-      audioPath = await extractAudioFromVideo(inputPath);
+      try {
+        audioPath = await extractAudioFromVideo(inputPath);
+      } catch {
+        throw new Error(
+          "비디오 파일은 현재 지원되지 않습니다. MP3, WAV 등 오디오 파일을 업로드해주세요.",
+        );
+      }
     }
 
     const audioFilePath = audioPath ?? inputPath;
@@ -37,9 +43,13 @@ export async function dubFile(
       audio: dubbedAudio.toString("base64"),
     };
   } finally {
-    try { await unlink(inputPath); } catch {}
+    try {
+      await unlink(inputPath);
+    } catch {}
     if (audioPath) {
-      try { await unlink(audioPath); } catch {}
+      try {
+        await unlink(audioPath);
+      } catch {}
     }
   }
 }
