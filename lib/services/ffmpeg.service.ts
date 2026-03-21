@@ -1,29 +1,20 @@
 import { spawn } from "child_process";
+import ffmpegPath from "ffmpeg-static";
 import { join } from "path";
 import { tmpdir } from "os";
 
-// Turbopack이 빌드 시점에 경로를 /ROOT/로 재매핑하는 문제 방지
-// 정적 분석을 우회하여 런타임에 실제 경로를 resolve
-function getFfmpegPath(): string {
-  const modulePath = join(process.cwd(), "node_modules", "ffmpeg-static", "ffmpeg");
-  return modulePath;
-}
-
 function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const binPath = getFfmpegPath();
+    if (!ffmpegPath) {
+      reject(new Error("ffmpeg binary not found"));
+      return;
+    }
 
-    const proc = spawn(binPath, args);
-    const stderrChunks: Buffer[] = [];
-    proc.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
-    proc.stdout.resume();
+    const proc = spawn(ffmpegPath, args);
 
     proc.on("close", (code) => {
       if (code === 0) resolve();
-      else {
-        const stderr = Buffer.concat(stderrChunks).toString().slice(-500);
-        reject(new Error(`ffmpeg exited with code ${code}: ${stderr}`));
-      }
+      else reject(new Error(`ffmpeg exited with code ${code}`));
     });
 
     proc.on("error", reject);

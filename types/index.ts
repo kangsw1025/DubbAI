@@ -1,6 +1,7 @@
 export interface DubbingResult {
   transcript: string;
   translation: string;
+  audio: string; // base64 encoded mp3
 }
 
 export type DubbingStatus =
