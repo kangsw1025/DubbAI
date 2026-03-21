@@ -17,13 +17,13 @@ describe("DubbingForm", () => {
   it("처리 중일 때 로딩 텍스트를 표시해야 한다", () => {
     render(<DubbingForm onSubmit={mockOnSubmit} isProcessing={true} />);
 
-    expect(screen.getByText("더빙 처리 중...")).toBeInTheDocument();
+    expect(screen.getByText("처리 중...")).toBeInTheDocument();
   });
 
   it("처리 중일 때 버튼이 비활성화 되어야 한다", () => {
     render(<DubbingForm onSubmit={mockOnSubmit} isProcessing={true} />);
 
-    expect(screen.getByRole("button", { name: "더빙 처리 중..." })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "처리 중..." })).toBeDisabled();
   });
 
   it("언어 선택 드롭다운이 렌더링 되어야 한다", () => {

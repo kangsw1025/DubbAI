@@ -49,7 +49,9 @@ describe("ElevenLabs Service", () => {
     it("STT API 오류 시 에러를 전파해야 한다", async () => {
       mockSTT.mockRejectedValue(new Error("API error"));
 
-      await expect(transcribeAudio(Buffer.from("audio"))).rejects.toThrow("API error");
+      await expect(transcribeAudio(Buffer.from("audio"))).rejects.toThrow(
+        "API error",
+      );
     });
   });
 
@@ -74,7 +76,7 @@ describe("ElevenLabs Service", () => {
       expect(result).toBeInstanceOf(Buffer);
       expect(result.length).toBeGreaterThan(0);
       expect(mockTTS).toHaveBeenCalledWith(
-        "21m00Tcm4TlvDq8ikWAM",
+        "9zMhK0orV1GKoaLUzkbe",
         expect.objectContaining({ text: "Hello world" }),
       );
     });

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import type { DubbingFormProps, DubbingStatus } from "@/types";
 import { CLIP_SECONDS } from "@/lib/utils/clipVideo";
+import { isIOS } from "@/lib/utils/deviceDetect";
 
 const LANGUAGES = [
   { code: "KO", label: "한국어" },
@@ -14,42 +15,91 @@ const LANGUAGES = [
   { code: "ES", label: "스페인어" },
 ];
 
-const VIDEO_STEPS: { key: DubbingStatus; label: string; desc: string }[] = [
+// PC / Android: captureStream 기반
+const PC_STEPS: { key: DubbingStatus; label: string; desc: string }[] = [
   { key: "clipping", label: "클립 준비", desc: "선택한 구간 녹화 중..." },
   { key: "processing", label: "더빙 처리", desc: "AI가 더빙 생성 중..." },
   { key: "muxing", label: "영상 합성", desc: "오디오를 영상에 합치는 중..." },
 ];
 
-const STEP_ORDER: DubbingStatus[] = ["clipping", "processing", "muxing", "success"];
+// iOS: AudioContext 기반
+const IOS_STEPS: { key: DubbingStatus; label: string; desc: string }[] = [
+  { key: "extracting", label: "오디오 추출", desc: "영상에서 음성 추출 중..." },
+  { key: "processing", label: "더빙 처리", desc: "AI가 더빙 생성 중..." },
+  { key: "muxing", label: "영상 합성", desc: "서버에서 영상 합치는 중..." },
+];
+
+const PC_STEP_ORDER: DubbingStatus[] = [
+  "clipping",
+  "processing",
+  "muxing",
+  "success",
+];
+const IOS_STEP_ORDER: DubbingStatus[] = [
+  "extracting",
+  "processing",
+  "muxing",
+  "success",
+];
 
 function getStepState(
   stepKey: DubbingStatus,
   currentStatus: DubbingStatus,
+  stepOrder: DubbingStatus[],
 ): "done" | "active" | "pending" {
-  const stepIdx = STEP_ORDER.indexOf(stepKey);
-  const currentIdx = STEP_ORDER.indexOf(currentStatus);
+  const stepIdx = stepOrder.indexOf(stepKey);
+  const currentIdx = stepOrder.indexOf(currentStatus);
   if (currentIdx > stepIdx) return "done";
   if (currentIdx === stepIdx) return "active";
   return "pending";
 }
 
 function ProgressSteps({ status }: { status: DubbingStatus }) {
+  const ios = isIOS();
+  const steps = ios ? IOS_STEPS : PC_STEPS;
+  const stepOrder = ios ? IOS_STEP_ORDER : PC_STEP_ORDER;
+
   return (
     <div className="mt-4 space-y-2">
-      {VIDEO_STEPS.map((step) => {
-        const state = getStepState(step.key, status);
+      {steps.map((step) => {
+        const state = getStepState(step.key, status, stepOrder);
         return (
           <div key={step.key} className="flex items-center gap-3">
             <div className="w-6 h-6 flex-shrink-0 flex items-center justify-center">
               {state === "done" && (
-                <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                <svg
+                  className="w-5 h-5 text-green-500"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
                 </svg>
               )}
               {state === "active" && (
-                <svg className="w-5 h-5 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                <svg
+                  className="w-5 h-5 text-blue-500 animate-spin"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                  />
                 </svg>
               )}
               {state === "pending" && (
@@ -98,7 +148,6 @@ export function DubbingForm({
   const previewRef = useRef<HTMLVideoElement>(null);
   const previewUrlRef = useRef<string | null>(null);
 
-  // 파일 변경 시 미리보기 URL 갱신
   useEffect(() => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
     setStartTime(0);
@@ -139,11 +188,21 @@ export function DubbingForm({
   const maxStart = Math.max(0, Math.floor(videoDuration) - CLIP_SECONDS);
   const endTime = Math.min(startTime + CLIP_SECONDS, videoDuration);
 
+  const activeStatuses: DubbingStatus[] = [
+    "clipping",
+    "extracting",
+    "processing",
+    "muxing",
+  ];
   const showProgress =
     isProcessing &&
     isVideoFile &&
     dubbingStatus &&
-    ["clipping", "processing", "muxing"].includes(dubbingStatus);
+    activeStatuses.includes(dubbingStatus);
+
+  // iOS에서 200MB 초과 시 경고
+  const isIOSLargeFile =
+    isIOS() && isVideoFile && file && file.size > 200 * 1024 * 1024;
 
   return (
     <div>
@@ -159,7 +218,9 @@ export function DubbingForm({
         ) : (
           <>
             <p className="text-gray-500">오디오 또는 비디오 파일 클릭하여 업로드</p>
-            <p className="text-sm text-gray-400 mt-1">MP3, MP4, WAV, MOV 등 지원</p>
+            <p className="text-sm text-gray-400 mt-1">
+              MP3, MP4, WAV, MOV 등 지원
+            </p>
           </>
         )}
         <input
@@ -172,7 +233,15 @@ export function DubbingForm({
         />
       </div>
 
-      {/* 비디오 미리보기 + 구간 선택 (1분 초과 영상만) */}
+      {/* iOS 대용량 경고 */}
+      {isIOSLargeFile && (
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+          파일이 200MB를 초과합니다. 더빙 오디오만 제공됩니다. 영상 합성을
+          원하시면 편집 앱에서 1분 구간을 먼저 잘라주세요.
+        </div>
+      )}
+
+      {/* 비디오 미리보기 + 구간 선택 */}
       {isVideoFile && file && (
         <div className="mb-4">
           <video
@@ -211,7 +280,9 @@ export function DubbingForm({
 
       {/* Language select */}
       <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">타겟 언어</label>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          타겟 언어
+        </label>
         <select
           value={targetLanguage}
           onChange={(e) => setTargetLanguage(e.target.value)}
@@ -236,7 +307,9 @@ export function DubbingForm({
       </button>
 
       {/* 진행상황 — 비디오 처리 중일 때만 표시 */}
-      {showProgress && dubbingStatus && <ProgressSteps status={dubbingStatus} />}
+      {showProgress && dubbingStatus && (
+        <ProgressSteps status={dubbingStatus} />
+      )}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { dubFile } from "@/lib/services/dubbing.service";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -24,13 +24,18 @@ export async function POST(req: NextRequest) {
   if (!file || !targetLanguage) {
     return NextResponse.json(
       { error: "file과 targetLanguage가 필요합니다." },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   try {
     const fileBuffer = Buffer.from(await file.arrayBuffer());
-    const result = await dubFile(fileBuffer, file.name, file.type, targetLanguage);
+    const result = await dubFile(
+      fileBuffer,
+      file.name,
+      file.type,
+      targetLanguage,
+    );
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "서버 오류";
