@@ -23,6 +23,8 @@
 | STT/TTS | ElevenLabs API |
 | 번역 | DeepL API (무료) |
 | 배포 | Vercel (GitHub 자동 배포) |
+| 모바일 ffmpeg 서버 | Railway (외부 마이크로서비스) |
+| 클라이언트 영상 클립 | ffmpeg.wasm (PC), captureStream (Android) |
 
 ---
 
@@ -37,6 +39,14 @@ NEXTAUTH_SECRET=
 NEXTAUTH_URL=
 ELEVENLABS_API_KEY=
 DEEPL_API_KEY=
+MUX_URL=                  # Railway 서버 URL (서버 사이드 전용)
+MUX_AUTH_TOKEN=           # Railway 인증 토큰 (서버 사이드 전용, NEXT_PUBLIC 금지)
+```
+
+**Railway 서버 환경변수** (`dubbai-mux-server`):
+```env
+MUX_AUTH_TOKEN=           # Vercel과 동일한 값
+PORT=                     # Railway 자동 주입
 ```
 
 ---
@@ -103,6 +113,63 @@ DEEPL_API_KEY=
 ### Phase 7 — 문서화
 - [x] README.md 완성 (배포 URL 포함, 에이전트 활용 노하우)
 
+### Phase 8 — 모바일 더빙 지원 (Railway ffmpeg 서버)
+
+**배경:** Vercel Lambda는 read-only 파일시스템 + 실행 파일 제한으로 ffmpeg 직접 실행 불가.
+외부 ffmpeg 마이크로서비스(Railway)를 별도 레포(`dubbai-mux-server`)로 구성.
+
+#### OS별 더빙 처리 플로우
+
+| 환경 | 클립 방식 | 오디오 추출 | mux |
+|------|----------|------------|-----|
+| PC | ffmpeg.wasm (클라이언트) | captureStream | ffmpeg.wasm (클라이언트) |
+| Android | captureStream 1분 클립 (클라이언트) | captureStream | Railway `/mux` |
+| iOS | 원본 그대로 전송 | Railway `/prepare` | Railway `/mux-session` |
+
+#### iOS 단일 업로드 구조 (세션 기반)
+
+iOS는 captureStream 미지원이라 클라이언트 클립 불가. 원본 영상을 한 번만 업로드하도록 세션 방식 사용:
+
+```
+1. 원본 영상 → Railway POST /prepare
+   └→ 세션ID + 1분 추출 오디오 반환 (영상은 Railway 디스크에 10분 보관)
+
+2. 오디오 → Vercel POST /api/dub
+   └→ STT + 번역 + TTS → 더빙 오디오
+
+3. 세션ID + 더빙 오디오(mp3) → Railway POST /mux-session
+   └→ 보관된 영상 클립 + mux → 완성 영상 반환 (세션 자동 삭제)
+```
+
+#### Railway 엔드포인트
+
+| 엔드포인트 | 용도 | 호출 주체 |
+|-----------|------|---------|
+| `POST /prepare` | 원본 영상 수신 + 오디오 추출 + 세션 저장 | iOS |
+| `POST /mux-session` | 세션 영상 + 더빙 오디오 → mux | iOS |
+| `POST /mux` | 클립된 영상 + 더빙 오디오 → mux | Android |
+| `GET /health` | 헬스체크 | - |
+
+#### 보안
+- `MUX_AUTH_TOKEN`은 서버 사이드 전용 (`NEXT_PUBLIC_` 사용 금지)
+- Vercel `GET /api/mux-token` 라우트가 인증된 클라이언트에게 토큰 전달
+- Railway 모든 엔드포인트 `Authorization: Bearer` 검증
+
+#### Railway 서버 구성
+- Node.js 20 + Express + multer (diskStorage) + ffmpeg-static
+- Dockerfile로 빌드 (ffmpeg-static npm 패키지 번들링)
+- multer 1GB 제한, diskStorage로 OOM 방지
+- 대용량 파일(200MB+)은 Railway 타임아웃(5분) 초과 시 실패 가능 — 경고 문구 표시
+
+- [x] `dubbai-mux-server` 레포 생성 및 Railway 배포
+- [x] Dockerfile 작성 (ffmpeg-static 기반)
+- [x] Railway `/prepare`, `/mux-session`, `/mux` 엔드포인트 구현
+- [x] `hooks/useDubbing.ts` OS별 분기 처리
+- [x] `lib/utils/clipVideo.ts` captureStream 클립 유틸
+- [x] `lib/utils/deviceDetect.ts` OS/기기 감지 유틸
+- [x] `app/api/mux-token/route.ts` 토큰 프록시 라우트
+- [x] Vercel 환경변수 `MUX_URL`, `MUX_AUTH_TOKEN` 등록
+
 ---
 
 ## 폴더 구조 (예정)
@@ -157,7 +224,8 @@ DubbAI/
 ├── app/                              # Next.js App Router
 │   ├── api/
 │   │   ├── auth/[...nextauth]/       # NextAuth
-│   │   └── dub/route.ts             # 얇은 컨트롤러 (서비스 호출만)
+│   │   ├── dub/route.ts             # 얇은 컨트롤러 (서비스 호출만)
+│   │   └── mux-token/route.ts       # Railway 토큰 프록시 (서버 사이드 전용)
 │   ├── unauthorized/page.tsx         # 접근 차단 페이지
 │   ├── layout.tsx
 │   ├── providers.tsx                 # SessionProvider 래퍼
@@ -175,8 +243,10 @@ DubbAI/
 │   │   ├── deepl.service.ts          # DeepL 번역 래퍼
 │   │   └── ffmpeg.service.ts         # 서버사이드 ffmpeg (영상 오디오 추출)
 │   ├── utils/
+│   │   ├── clipVideo.ts              # captureStream 1분 클립 (PC/Android)
+│   │   ├── deviceDetect.ts           # OS/기기 감지 (isIOS, isAndroid 등)
 │   │   ├── extractAudioClient.ts     # 클라이언트 ffmpeg.wasm 오디오 추출
-│   │   └── muxAudioToVideo.ts        # 클라이언트 ffmpeg.wasm 영상 합성
+│   │   └── muxAudioToVideo.ts        # 클라이언트 ffmpeg.wasm 영상 합성 (PC)
 │   ├── db.ts                         # Turso DB (Repository)
 │   └── auth.ts                       # NextAuth 설정
 ├── types/                            # TypeScript 타입 정의
