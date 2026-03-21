@@ -217,7 +217,9 @@ export function DubbingForm({
           <p className="text-gray-700 font-medium">{file.name}</p>
         ) : (
           <>
-            <p className="text-gray-500">오디오 또는 비디오 파일 클릭하여 업로드</p>
+            <p className="text-gray-500">
+              오디오 또는 비디오 파일 클릭하여 업로드
+            </p>
             <p className="text-sm text-gray-400 mt-1">
               MP3, MP4, WAV, MOV 등 지원
             </p>
@@ -236,8 +238,7 @@ export function DubbingForm({
       {/* iOS 대용량 경고 */}
       {isIOSLargeFile && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
-          파일이 200MB를 초과합니다. 더빙 오디오만 제공됩니다. 영상 합성을
-          원하시면 편집 앱에서 1분 구간을 먼저 잘라주세요.
+          원본 파일이 크면 처리에 실패할 수 있습니다.
         </div>
       )}
 
