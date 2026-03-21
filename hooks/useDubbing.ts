@@ -16,11 +16,18 @@ export function useDubbing() {
   const [isVideo, setIsVideo] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const setMediaUrlAndRevokePrev = (url: string | null) => {
+    setMediaUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return url;
+    });
+  };
+
   const dub = async (file: File, targetLanguage: string, startTime = 0) => {
     setStatus("processing");
     setError(null);
     setResult(null);
-    setMediaUrl(null);
+    setMediaUrlAndRevokePrev(null);
 
     const fileIsVideo = file.type.startsWith("video/");
     setIsVideo(fileIsVideo);
@@ -52,6 +59,12 @@ export function useDubbing() {
     }
   };
 
+  async function getMuxConfig(): Promise<{ url: string; token: string }> {
+    const res = await fetch("/api/mux-token");
+    if (!res.ok) throw new Error("mux 서버 설정을 불러오지 못했습니다.");
+    return res.json();
+  }
+
   /** 오디오 파일: 모든 디바이스 동일 */
   const dubAudioFile = async (file: File, targetLanguage: string) => {
     setStatus("processing");
@@ -68,7 +81,7 @@ export function useDubbing() {
       c.charCodeAt(0),
     );
     const dubbedBlob = new Blob([audioBytes], { type: "audio/mpeg" });
-    setMediaUrl(URL.createObjectURL(dubbedBlob));
+    setMediaUrlAndRevokePrev(URL.createObjectURL(dubbedBlob));
     setIsVideo(false);
     setStatus("success");
   };
@@ -111,10 +124,10 @@ export function useDubbing() {
     try {
       const { muxAudioToVideo } = await import("@/lib/utils/muxAudioToVideo");
       const finalVideo = await muxAudioToVideo(videoFile, dubbedBlob);
-      setMediaUrl(URL.createObjectURL(finalVideo));
+      setMediaUrlAndRevokePrev(URL.createObjectURL(finalVideo));
     } catch {
       // ffmpeg.wasm 실패 시 오디오만 제공
-      setMediaUrl(URL.createObjectURL(dubbedBlob));
+      setMediaUrlAndRevokePrev(URL.createObjectURL(dubbedBlob));
       setIsVideo(false);
     }
 
@@ -153,22 +166,21 @@ export function useDubbing() {
     const dubbedBlob = new Blob([audioBytes], { type: "audio/mpeg" });
 
     setStatus("muxing");
-    const videoFile = new File([videoBlob], "clip.webm", {
+    const videoClip = new File([videoBlob], "clip.webm", {
       type: videoBlob.type,
     });
 
     try {
+      const { url: muxUrl, token: muxToken } = await getMuxConfig();
+
       const muxFormData = new FormData();
-      muxFormData.append("video", videoFile);
+      muxFormData.append("video", videoClip);
       muxFormData.append(
         "audio",
         new File([dubbedBlob], "dubbed.mp3", { type: "audio/mpeg" }),
       );
 
-      const muxUrl = process.env.NEXT_PUBLIC_MUX_URL + "/mux";
-      const muxToken = process.env.NEXT_PUBLIC_MUX_TOKEN ?? "";
-
-      const muxRes = await fetch(muxUrl, {
+      const muxRes = await fetch(`${muxUrl}/mux`, {
         method: "POST",
         headers: { Authorization: `Bearer ${muxToken}` },
         body: muxFormData,
@@ -179,10 +191,10 @@ export function useDubbing() {
       const mimeType = muxRes.headers.get("Content-Type") ?? "video/mp4";
       const muxedBuffer = await muxRes.arrayBuffer();
       const muxedBlob = new Blob([muxedBuffer], { type: mimeType });
-      setMediaUrl(URL.createObjectURL(muxedBlob));
+      setMediaUrlAndRevokePrev(URL.createObjectURL(muxedBlob));
     } catch {
       // mux 실패 시 오디오만 제공
-      setMediaUrl(URL.createObjectURL(dubbedBlob));
+      setMediaUrlAndRevokePrev(URL.createObjectURL(dubbedBlob));
       setIsVideo(false);
     }
 
@@ -195,14 +207,13 @@ export function useDubbing() {
     targetLanguage: string,
     startTime: number,
   ) => {
+    const { url: muxUrl, token: muxToken } = await getMuxConfig();
+
     // 1단계: Railway에서 ffmpeg으로 오디오 추출 (iOS autoplay 정책 우회)
     setStatus("extracting");
     const extractFormData = new FormData();
     extractFormData.append("video", file);
     extractFormData.append("startTime", String(startTime));
-
-    const muxUrl = process.env.NEXT_PUBLIC_MUX_URL ?? "";
-    const muxToken = process.env.NEXT_PUBLIC_MUX_TOKEN ?? "";
 
     const extractRes = await fetch(`${muxUrl}/extract-audio`, {
       method: "POST",
@@ -243,10 +254,7 @@ export function useDubbing() {
       );
       muxFormData.append("startTime", String(startTime));
 
-      const muxUrl = process.env.NEXT_PUBLIC_MUX_URL + "/mux";
-      const muxToken = process.env.NEXT_PUBLIC_MUX_TOKEN ?? "";
-
-      const muxRes = await fetch(muxUrl, {
+      const muxRes = await fetch(`${muxUrl}/mux`, {
         method: "POST",
         headers: { Authorization: `Bearer ${muxToken}` },
         body: muxFormData,
@@ -257,10 +265,10 @@ export function useDubbing() {
       const mimeType = muxRes.headers.get("Content-Type") ?? "video/mp4";
       const muxedBuffer = await muxRes.arrayBuffer();
       const muxedBlob = new Blob([muxedBuffer], { type: mimeType });
-      setMediaUrl(URL.createObjectURL(muxedBlob));
+      setMediaUrlAndRevokePrev(URL.createObjectURL(muxedBlob));
     } catch {
       // mux 실패 시 오디오만 제공
-      setMediaUrl(URL.createObjectURL(dubbedBlob));
+      setMediaUrlAndRevokePrev(URL.createObjectURL(dubbedBlob));
       setIsVideo(false);
     }
 
@@ -270,7 +278,7 @@ export function useDubbing() {
   const reset = () => {
     setStatus("idle");
     setResult(null);
-    setMediaUrl(null);
+    setMediaUrlAndRevokePrev(null);
     setIsVideo(false);
     setError(null);
   };

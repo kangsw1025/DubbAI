@@ -12,7 +12,7 @@ export function clipVideo(file: File, startTime = 0): Promise<ClipResult> {
     const objectUrl = URL.createObjectURL(file);
     const video = document.createElement("video");
     video.src = objectUrl;
-    video.muted = true;
+    video.volume = 0;
     video.playsInline = true;
 
     const cleanup = () => URL.revokeObjectURL(objectUrl);
@@ -25,11 +25,16 @@ export function clipVideo(file: File, startTime = 0): Promise<ClipResult> {
     const startRecording = () => {
       const getCaptureStream =
         "captureStream" in video
-          ? () => (video as HTMLVideoElement & { captureStream(): MediaStream }).captureStream()
+          ? () =>
+              (
+                video as HTMLVideoElement & { captureStream(): MediaStream }
+              ).captureStream()
           : "mozCaptureStream" in video
             ? () =>
                 (
-                  video as HTMLVideoElement & { mozCaptureStream(): MediaStream }
+                  video as HTMLVideoElement & {
+                    mozCaptureStream(): MediaStream;
+                  }
                 ).mozCaptureStream()
             : null;
 
@@ -51,7 +56,10 @@ export function clipVideo(file: File, startTime = 0): Promise<ClipResult> {
       const pickMime = (types: string[], fallback: string) =>
         types.find((t) => MediaRecorder.isTypeSupported(t)) ?? fallback;
 
-      const videoMime = pickMime(["video/webm;codecs=vp8,opus", "video/webm"], "video/webm");
+      const videoMime = pickMime(
+        ["video/webm;codecs=vp8,opus", "video/webm"],
+        "video/webm",
+      );
       const audioMime = pickMime(
         ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"],
         "audio/webm",
@@ -65,7 +73,9 @@ export function clipVideo(file: File, startTime = 0): Promise<ClipResult> {
       const audioTracks = stream.getAudioTracks();
       const audioRecorder =
         audioTracks.length > 0
-          ? new MediaRecorder(new MediaStream(audioTracks), { mimeType: audioMime })
+          ? new MediaRecorder(new MediaStream(audioTracks), {
+              mimeType: audioMime,
+            })
           : null;
 
       videoRecorder.ondataavailable = (e) => {
@@ -85,7 +95,9 @@ export function clipVideo(file: File, startTime = 0): Promise<ClipResult> {
         if (!videoStopped || !audioStopped || resolved) return;
         resolved = true;
         cleanup();
-        const videoBlob = new Blob(videoChunks, { type: videoMime.split(";")[0] });
+        const videoBlob = new Blob(videoChunks, {
+          type: videoMime.split(";")[0],
+        });
         const audioBlob =
           audioChunks.length > 0
             ? new Blob(audioChunks, { type: audioMime.split(";")[0] })
@@ -115,7 +127,8 @@ export function clipVideo(file: File, startTime = 0): Promise<ClipResult> {
         stopped = true;
         video.pause();
         if (videoRecorder.state !== "inactive") videoRecorder.stop();
-        if (audioRecorder && audioRecorder.state !== "inactive") audioRecorder.stop();
+        if (audioRecorder && audioRecorder.state !== "inactive")
+          audioRecorder.stop();
       };
 
       video.addEventListener("timeupdate", () => {
