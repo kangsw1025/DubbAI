@@ -201,7 +201,7 @@ export function useDubbing() {
     setStatus("success");
   };
 
-  /** iOS: AudioContext 오디오 추출 + 서버 mux */
+  /** iOS: 원본 영상 1회 업로드 → /prepare → STT+TTS → /mux-session */
   const dubVideoIOS = async (
     file: File,
     targetLanguage: string,
@@ -209,21 +209,24 @@ export function useDubbing() {
   ) => {
     const { url: muxUrl, token: muxToken } = await getMuxConfig();
 
-    // 1단계: Railway에서 ffmpeg으로 오디오 추출 (iOS autoplay 정책 우회)
+    // 1단계: Railway /prepare — 영상 1회 업로드, 오디오 추출 + 세션 보관
     setStatus("extracting");
-    const extractFormData = new FormData();
-    extractFormData.append("video", file);
-    extractFormData.append("startTime", String(startTime));
+    const prepareFormData = new FormData();
+    prepareFormData.append("video", file);
+    prepareFormData.append("startTime", String(startTime));
 
-    const extractRes = await fetch(`${muxUrl}/extract-audio`, {
+    const prepareRes = await fetch(`${muxUrl}/prepare`, {
       method: "POST",
       headers: { Authorization: `Bearer ${muxToken}` },
-      body: extractFormData,
+      body: prepareFormData,
     });
-    if (!extractRes.ok) throw new Error("오디오 추출 실패");
-    const audioBlob = await extractRes.blob();
+    if (!prepareRes.ok) throw new Error("오디오 추출 실패");
 
-    // 2단계: 서버에서 STT + 번역 + TTS
+    const sessionId = prepareRes.headers.get("X-Session-Id");
+    if (!sessionId) throw new Error("세션 ID를 받지 못했습니다.");
+    const audioBlob = await prepareRes.blob();
+
+    // 2단계: Vercel STT + 번역 + TTS
     setStatus("processing");
     const audioFile = new File([audioBlob], "audio.mp3", {
       type: "audio/mpeg",
@@ -243,18 +246,18 @@ export function useDubbing() {
     );
     const dubbedBlob = new Blob([audioBytes], { type: "audio/mpeg" });
 
-    // 3단계: 원본 비디오를 Railway로 보내 클립 + mux
+    // 3단계: Railway /mux-session — 더빙 오디오(작은 mp3)만 전송
     setStatus("muxing");
     try {
       const muxFormData = new FormData();
-      muxFormData.append("video", file);
       muxFormData.append(
         "audio",
         new File([dubbedBlob], "dubbed.mp3", { type: "audio/mpeg" }),
       );
+      muxFormData.append("sessionId", sessionId);
       muxFormData.append("startTime", String(startTime));
 
-      const muxRes = await fetch(`${muxUrl}/mux`, {
+      const muxRes = await fetch(`${muxUrl}/mux-session`, {
         method: "POST",
         headers: { Authorization: `Bearer ${muxToken}` },
         body: muxFormData,
