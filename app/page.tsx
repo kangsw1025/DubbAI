@@ -57,6 +57,7 @@ export default function Home() {
             <DubbingForm
               onSubmit={dub}
               isProcessing={
+                dubbingStatus === "clipping" ||
                 dubbingStatus === "extracting" ||
                 dubbingStatus === "processing" ||
                 dubbingStatus === "muxing"

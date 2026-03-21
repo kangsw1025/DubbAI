@@ -10,7 +10,7 @@ export function useDubbing() {
   const [isVideo, setIsVideo] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const dub = async (file: File, targetLanguage: string) => {
+  const dub = async (file: File, targetLanguage: string, startTime = 0) => {
     setStatus("processing");
     setError(null);
     setResult(null);
@@ -24,7 +24,7 @@ export function useDubbing() {
         // 1단계: 최대 60초로 클립 + 오디오 동시 추출 (WASM 없음)
         setStatus("clipping");
         const { clipVideo } = await import("@/lib/utils/clipVideo");
-        const { videoBlob, audioBlob } = await clipVideo(file);
+        const { videoBlob, audioBlob } = await clipVideo(file, startTime);
 
         // 2단계: 오디오를 서버로 전송해 더빙
         setStatus("processing");
@@ -39,18 +39,24 @@ export function useDubbing() {
 
         const res = await fetch("/api/dub", { method: "POST", body: formData });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "더빙 중 오류가 발생했습니다.");
+        if (!res.ok)
+          throw new Error(data.error || "더빙 중 오류가 발생했습니다.");
 
         setResult(data);
 
-        const audioBytes = Uint8Array.from(atob(data.audio), (c) => c.charCodeAt(0));
+        const audioBytes = Uint8Array.from(atob(data.audio), (c) =>
+          c.charCodeAt(0),
+        );
         const dubbedBlob = new Blob([audioBytes], { type: "audio/mpeg" });
 
         // 3단계: 클립 + 더빙 오디오 합성 (WASM)
         setStatus("muxing");
-        const videoFile = new File([videoBlob], "clip.webm", { type: videoBlob.type });
+        const videoFile = new File([videoBlob], "clip.webm", {
+          type: videoBlob.type,
+        });
         try {
-          const { muxAudioToVideo } = await import("@/lib/utils/muxAudioToVideo");
+          const { muxAudioToVideo } =
+            await import("@/lib/utils/muxAudioToVideo");
           const finalVideo = await muxAudioToVideo(videoFile, dubbedBlob);
           setMediaUrl(URL.createObjectURL(finalVideo));
         } catch {
@@ -66,10 +72,13 @@ export function useDubbing() {
 
         const res = await fetch("/api/dub", { method: "POST", body: formData });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "더빙 중 오류가 발생했습니다.");
+        if (!res.ok)
+          throw new Error(data.error || "더빙 중 오류가 발생했습니다.");
 
         setResult(data);
-        const audioBytes = Uint8Array.from(atob(data.audio), (c) => c.charCodeAt(0));
+        const audioBytes = Uint8Array.from(atob(data.audio), (c) =>
+          c.charCodeAt(0),
+        );
         const dubbedBlob = new Blob([audioBytes], { type: "audio/mpeg" });
         setMediaUrl(URL.createObjectURL(dubbedBlob));
       }

@@ -1,18 +1,18 @@
 "use client";
 
-const CLIP_SECONDS = 60;
+export const CLIP_SECONDS = 60;
 
 export interface ClipResult {
   videoBlob: Blob;
   audioBlob: Blob;
 }
 
-export function clipVideo(file: File): Promise<ClipResult> {
+export function clipVideo(file: File, startTime = 0): Promise<ClipResult> {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
     const video = document.createElement("video");
     video.src = objectUrl;
-    video.muted = true; // 스피커 음소거 (captureStream 오디오엔 영향 없음)
+    video.muted = true;
     video.playsInline = true;
 
     const cleanup = () => URL.revokeObjectURL(objectUrl);
@@ -22,39 +22,36 @@ export function clipVideo(file: File): Promise<ClipResult> {
       reject(new Error("비디오 로드 실패"));
     });
 
-    video.addEventListener("loadedmetadata", () => {
-      const captureStream =
+    const startRecording = () => {
+      const getCaptureStream =
         "captureStream" in video
           ? () => (video as HTMLVideoElement & { captureStream(): MediaStream }).captureStream()
           : "mozCaptureStream" in video
             ? () =>
                 (
-                  video as HTMLVideoElement & {
-                    mozCaptureStream(): MediaStream;
-                  }
+                  video as HTMLVideoElement & { mozCaptureStream(): MediaStream }
                 ).mozCaptureStream()
             : null;
 
-      if (!captureStream) {
+      if (!getCaptureStream) {
         cleanup();
         reject(new Error("이 브라우저는 영상 클립을 지원하지 않습니다."));
         return;
       }
 
-      const clipDuration = Math.min(
-        isFinite(video.duration) ? video.duration : CLIP_SECONDS,
-        CLIP_SECONDS,
-      );
+      const endTime =
+        startTime +
+        Math.min(
+          CLIP_SECONDS,
+          isFinite(video.duration) ? video.duration - startTime : CLIP_SECONDS,
+        );
 
-      const stream = captureStream();
+      const stream = getCaptureStream();
 
       const pickMime = (types: string[], fallback: string) =>
         types.find((t) => MediaRecorder.isTypeSupported(t)) ?? fallback;
 
-      const videoMime = pickMime(
-        ["video/webm;codecs=vp8,opus", "video/webm"],
-        "video/webm",
-      );
+      const videoMime = pickMime(["video/webm;codecs=vp8,opus", "video/webm"], "video/webm");
       const audioMime = pickMime(
         ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"],
         "audio/webm",
@@ -122,10 +119,10 @@ export function clipVideo(file: File): Promise<ClipResult> {
       };
 
       video.addEventListener("timeupdate", () => {
-        if (video.currentTime >= clipDuration) stopAll();
+        if (video.currentTime >= endTime) stopAll();
       });
       video.addEventListener("ended", stopAll);
-      setTimeout(stopAll, (clipDuration + 5) * 1000);
+      setTimeout(stopAll, (endTime - startTime + 5) * 1000);
 
       videoRecorder.start(200);
       if (audioRecorder) audioRecorder.start(200);
@@ -133,6 +130,15 @@ export function clipVideo(file: File): Promise<ClipResult> {
         cleanup();
         reject(new Error("비디오 재생 실패"));
       });
+    };
+
+    video.addEventListener("loadedmetadata", () => {
+      if (startTime > 0) {
+        video.currentTime = startTime;
+        video.addEventListener("seeked", startRecording, { once: true });
+      } else {
+        startRecording();
+      }
     });
   });
 }

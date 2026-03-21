@@ -14,7 +14,11 @@ export type DubbingStatus =
   | "error";
 
 export interface DubbingFormProps {
-  onSubmit: (file: File, targetLanguage: string) => Promise<void>;
+  onSubmit: (
+    file: File,
+    targetLanguage: string,
+    startTime: number,
+  ) => Promise<void>;
   isProcessing: boolean;
   dubbingStatus?: DubbingStatus;
 }

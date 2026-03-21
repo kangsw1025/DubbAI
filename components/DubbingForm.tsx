@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { DubbingFormProps, DubbingStatus } from "@/types";
+import { CLIP_SECONDS } from "@/lib/utils/clipVideo";
 
 const LANGUAGES = [
   { code: "KO", label: "한국어" },
@@ -14,7 +15,7 @@ const LANGUAGES = [
 ];
 
 const VIDEO_STEPS: { key: DubbingStatus; label: string; desc: string }[] = [
-  { key: "clipping", label: "클립 준비", desc: "최대 1분으로 영상 자르는 중..." },
+  { key: "clipping", label: "클립 준비", desc: "선택한 구간 녹화 중..." },
   { key: "processing", label: "더빙 처리", desc: "AI가 더빙 생성 중..." },
   { key: "muxing", label: "영상 합성", desc: "오디오를 영상에 합치는 중..." },
 ];
@@ -78,6 +79,12 @@ function ProgressSteps({ status }: { status: DubbingStatus }) {
   );
 }
 
+function formatTime(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 export function DubbingForm({
   onSubmit,
   isProcessing,
@@ -85,14 +92,53 @@ export function DubbingForm({
 }: DubbingFormProps) {
   const [file, setFile] = useState<File | null>(null);
   const [targetLanguage, setTargetLanguage] = useState("EN-US");
+  const [startTime, setStartTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewRef = useRef<HTMLVideoElement>(null);
+  const previewUrlRef = useRef<string | null>(null);
+
+  // 파일 변경 시 미리보기 URL 갱신
+  useEffect(() => {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    setStartTime(0);
+    setVideoDuration(0);
+
+    if (!file || !file.type.startsWith("video/")) {
+      previewUrlRef.current = null;
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+    previewUrlRef.current = url;
+    if (previewRef.current) previewRef.current.src = url;
+
+    return () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    };
+  }, [file]);
+
+  const handleLoadedMetadata = () => {
+    const dur = previewRef.current?.duration ?? 0;
+    if (isFinite(dur)) setVideoDuration(dur);
+  };
+
+  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const t = Number(e.target.value);
+    setStartTime(t);
+    if (previewRef.current) previewRef.current.currentTime = t;
+  };
 
   const handleSubmit = async () => {
     if (!file) return;
-    await onSubmit(file, targetLanguage);
+    await onSubmit(file, targetLanguage, startTime);
   };
 
   const isVideoFile = file?.type.startsWith("video/") ?? false;
+  const needsClipUI = isVideoFile && videoDuration > CLIP_SECONDS;
+  const maxStart = Math.max(0, Math.floor(videoDuration) - CLIP_SECONDS);
+  const endTime = Math.min(startTime + CLIP_SECONDS, videoDuration);
+
   const showProgress =
     isProcessing &&
     isVideoFile &&
@@ -103,7 +149,7 @@ export function DubbingForm({
     <div>
       {/* File upload */}
       <div
-        onClick={() => fileInputRef.current?.click()}
+        onClick={() => !isProcessing && fileInputRef.current?.click()}
         role="button"
         aria-label="파일 업로드"
         className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 transition-colors mb-4"
@@ -112,12 +158,8 @@ export function DubbingForm({
           <p className="text-gray-700 font-medium">{file.name}</p>
         ) : (
           <>
-            <p className="text-gray-500">
-              오디오 또는 비디오 파일 클릭하여 업로드
-            </p>
-            <p className="text-sm text-gray-400 mt-1">
-              MP3, MP4, WAV, MOV 등 지원
-            </p>
+            <p className="text-gray-500">오디오 또는 비디오 파일 클릭하여 업로드</p>
+            <p className="text-sm text-gray-400 mt-1">MP3, MP4, WAV, MOV 등 지원</p>
           </>
         )}
         <input
@@ -130,11 +172,46 @@ export function DubbingForm({
         />
       </div>
 
+      {/* 비디오 미리보기 + 구간 선택 (1분 초과 영상만) */}
+      {isVideoFile && file && (
+        <div className="mb-4">
+          <video
+            ref={previewRef}
+            className="w-full rounded-lg bg-black max-h-48 object-contain"
+            onLoadedMetadata={handleLoadedMetadata}
+            controls={!needsClipUI}
+            muted
+            playsInline
+          />
+          {needsClipUI && (
+            <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+              <div className="flex justify-between text-xs text-gray-500 mb-1">
+                <span>시작 지점</span>
+                <span className="font-medium text-blue-600">
+                  {formatTime(startTime)} ~ {formatTime(endTime)} (1분)
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={maxStart}
+                step={1}
+                value={startTime}
+                onChange={handleSliderChange}
+                className="w-full accent-blue-600"
+              />
+              <div className="flex justify-between text-xs text-gray-400 mt-1">
+                <span>0:00</span>
+                <span>{formatTime(videoDuration)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Language select */}
       <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          타겟 언어
-        </label>
+        <label className="block text-sm font-medium text-gray-700 mb-2">타겟 언어</label>
         <select
           value={targetLanguage}
           onChange={(e) => setTargetLanguage(e.target.value)}
@@ -159,9 +236,7 @@ export function DubbingForm({
       </button>
 
       {/* 진행상황 — 비디오 처리 중일 때만 표시 */}
-      {showProgress && dubbingStatus && (
-        <ProgressSteps status={dubbingStatus} />
-      )}
+      {showProgress && dubbingStatus && <ProgressSteps status={dubbingStatus} />}
     </div>
   );
 }
