@@ -4,14 +4,18 @@ import { tmpdir } from "os";
 import { transcribeAudio, synthesizeSpeech } from "./elevenlabs.service";
 import { translateText } from "./deepl.service";
 import { extractAudioFromVideo } from "./ffmpeg.service";
-import type { DubbingResult } from "@/types";
+export interface DubFileResult {
+  transcript: string;
+  translation: string;
+  audioBuffer: Buffer;
+}
 
 export async function dubFile(
   fileBuffer: Buffer,
   filename: string,
   fileType: string,
   targetLanguage: string,
-): Promise<DubbingResult> {
+): Promise<DubFileResult> {
   const timestamp = Date.now();
   const inputPath = join(tmpdir(), `dubbai-input-${timestamp}-${filename}`);
   let audioPath: string | null = null;
@@ -33,7 +37,7 @@ export async function dubFile(
     return {
       transcript,
       translation,
-      audio: dubbedAudio.toString("base64"),
+      audioBuffer: dubbedAudio,
     };
   } finally {
     try {

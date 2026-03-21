@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import type { DubbingFormProps, DubbingStatus } from "@/types";
 import { CLIP_SECONDS } from "@/lib/utils/clipVideo";
-import { isIOS } from "@/lib/utils/deviceDetect";
+import { isIOS, isAndroid } from "@/lib/utils/deviceDetect";
 
 const LANGUAGES = [
   { code: "KO", label: "한국어" },
@@ -15,18 +15,18 @@ const LANGUAGES = [
   { code: "ES", label: "스페인어" },
 ];
 
-// PC / Android: captureStream 기반
+// PC: captureStream + ffmpeg.wasm 기반
 const PC_STEPS: { key: DubbingStatus; label: string; desc: string }[] = [
   { key: "clipping", label: "클립 준비", desc: "선택한 구간 녹화 중..." },
   { key: "processing", label: "더빙 처리", desc: "AI가 더빙 생성 중..." },
   { key: "muxing", label: "영상 합성", desc: "오디오를 영상에 합치는 중..." },
 ];
 
-// iOS: AudioContext 기반
-const IOS_STEPS: { key: DubbingStatus; label: string; desc: string }[] = [
+// 모바일 (Android + iOS): 오디오 추출 + 클라이언트 mux 기반
+const MOBILE_STEPS: { key: DubbingStatus; label: string; desc: string }[] = [
   { key: "extracting", label: "오디오 추출", desc: "영상에서 음성 추출 중..." },
   { key: "processing", label: "더빙 처리", desc: "AI가 더빙 생성 중..." },
-  { key: "muxing", label: "영상 합성", desc: "서버에서 영상 합치는 중..." },
+  { key: "muxing", label: "영상 합성", desc: "오디오를 영상에 합치는 중..." },
 ];
 
 const PC_STEP_ORDER: DubbingStatus[] = [
@@ -35,7 +35,7 @@ const PC_STEP_ORDER: DubbingStatus[] = [
   "muxing",
   "success",
 ];
-const IOS_STEP_ORDER: DubbingStatus[] = [
+const MOBILE_STEP_ORDER: DubbingStatus[] = [
   "extracting",
   "processing",
   "muxing",
@@ -55,9 +55,9 @@ function getStepState(
 }
 
 function ProgressSteps({ status }: { status: DubbingStatus }) {
-  const ios = isIOS();
-  const steps = ios ? IOS_STEPS : PC_STEPS;
-  const stepOrder = ios ? IOS_STEP_ORDER : PC_STEP_ORDER;
+  const mobile = isIOS() || isAndroid();
+  const steps = mobile ? MOBILE_STEPS : PC_STEPS;
+  const stepOrder = mobile ? MOBILE_STEP_ORDER : PC_STEP_ORDER;
 
   return (
     <div className="mt-4 space-y-2">
@@ -200,10 +200,6 @@ export function DubbingForm({
     dubbingStatus &&
     activeStatuses.includes(dubbingStatus);
 
-  // iOS에서 200MB 초과 시 경고
-  const isIOSLargeFile =
-    isIOS() && isVideoFile && file && file.size > 200 * 1024 * 1024;
-
   return (
     <div>
       {/* File upload */}
@@ -232,14 +228,6 @@ export function DubbingForm({
           onChange={(e) => setFile(e.target.files?.[0] || null)}
         />
       </div>
-
-      {/* iOS 대용량 경고 */}
-      {isIOSLargeFile && (
-        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
-          파일이 200MB를 초과합니다. 더빙 오디오만 제공됩니다. 영상 합성을
-          원하시면 편집 앱에서 1분 구간을 먼저 잘라주세요.
-        </div>
-      )}
 
       {/* 비디오 미리보기 + 구간 선택 */}
       {isVideoFile && file && (

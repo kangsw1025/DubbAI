@@ -5,11 +5,28 @@
 // Mock next/server before any imports to avoid Web API dependency
 jest.mock("next/server", () => ({
   NextRequest: jest.fn(),
-  NextResponse: {
-    json: (body: unknown, init?: { status?: number }) => ({
-      status: init?.status ?? 200,
-      json: async () => body,
-    }),
+  NextResponse: class MockNextResponse {
+    status: number;
+    _body: unknown;
+    _headers: Map<string, string>;
+
+    constructor(body: unknown, init?: { status?: number; headers?: Record<string, string> }) {
+      this._body = body;
+      this.status = init?.status ?? 200;
+      this._headers = new Map(Object.entries(init?.headers ?? {}));
+    }
+
+    async json() { return this._body; }
+    async arrayBuffer() { return (this._body as Uint8Array).buffer; }
+    get headers() {
+      return { get: (key: string) => this._headers.get(key) ?? null };
+    }
+
+    static json(body: unknown, init?: { status?: number }) {
+      const r = new MockNextResponse(body, init);
+      r.json = async () => body;
+      return r;
+    }
   },
 }));
 
@@ -86,12 +103,12 @@ describe("POST /api/dub", () => {
     expect(body.error).toContain("targetLanguage");
   });
 
-  it("성공 시 dubFile 결과를 JSON으로 반환해야 한다", async () => {
+  it("성공 시 바이너리 오디오와 헤더에 텍스트를 반환해야 한다", async () => {
     (getServerSession as jest.Mock).mockResolvedValue({ user: { email: "test@test.com" } });
     (dubFile as jest.Mock).mockResolvedValue({
       transcript: "Hello",
       translation: "안녕하세요",
-      audio: "base64audio==",
+      audioBuffer: Buffer.from("dubbed audio"),
     });
 
     const fd = new FormData();
@@ -101,10 +118,8 @@ describe("POST /api/dub", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = await POST(makeRequest(fd) as any);
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.transcript).toBe("Hello");
-    expect(body.translation).toBe("안녕하세요");
-    expect(body.audio).toBe("base64audio==");
+    expect(decodeURIComponent(res.headers.get("X-Transcript"))).toBe("Hello");
+    expect(decodeURIComponent(res.headers.get("X-Translation"))).toBe("안녕하세요");
   });
 
   it("서비스 오류 시 500을 반환해야 한다", async () => {
