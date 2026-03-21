@@ -175,8 +175,9 @@ export function useDubbing() {
 
       if (!muxRes.ok) throw new Error("mux 실패");
 
+      const mimeType = muxRes.headers.get("Content-Type") ?? "video/mp4";
       const muxedBuffer = await muxRes.arrayBuffer();
-      const muxedBlob = new Blob([muxedBuffer], { type: "video/mp4" });
+      const muxedBlob = new Blob([muxedBuffer], { type: mimeType });
       setMediaUrl(URL.createObjectURL(muxedBlob));
     } catch {
       // mux 실패 시 오디오만 제공
@@ -195,9 +196,8 @@ export function useDubbing() {
   ) => {
     // 1단계: AudioContext로 오디오 추출 (captureStream 없이)
     setStatus("extracting");
-    const { extractAudioContext } = await import(
-      "@/lib/utils/extractAudioContext"
-    );
+    const { extractAudioContext } =
+      await import("@/lib/utils/extractAudioContext");
     const audioBlob = await extractAudioContext(file, startTime);
 
     // 2단계: 서버에서 STT + 번역 + TTS
@@ -248,8 +248,9 @@ export function useDubbing() {
 
       if (!muxRes.ok) throw new Error("mux 실패");
 
+      const mimeType = muxRes.headers.get("Content-Type") ?? "video/mp4";
       const muxedBuffer = await muxRes.arrayBuffer();
-      const muxedBlob = new Blob([muxedBuffer], { type: "video/mp4" });
+      const muxedBlob = new Blob([muxedBuffer], { type: mimeType });
       setMediaUrl(URL.createObjectURL(muxedBlob));
     } catch {
       // mux 실패 시 오디오만 제공

@@ -22,15 +22,11 @@ function runFfmpeg(args: string[]): Promise<void> {
 }
 
 /** 비디오에서 오디오만 추출 (서버사이드) */
-export async function extractAudioFromVideo(videoPath: string): Promise<string> {
+export async function extractAudioFromVideo(
+  videoPath: string,
+): Promise<string> {
   const outputPath = join(tmpdir(), `dubbai-audio-${Date.now()}.mp3`);
-  await runFfmpeg([
-    "-i", videoPath,
-    "-vn",
-    "-acodec", "mp3",
-    "-y",
-    outputPath,
-  ]);
+  await runFfmpeg(["-i", videoPath, "-vn", "-acodec", "mp3", "-y", outputPath]);
   return outputPath;
 }
 
@@ -50,21 +46,29 @@ export async function clipAndExtractAudio(
 
   // 구간 클립 (스트림 복사, 빠름 / rotation 메타데이터 유지)
   await runFfmpeg([
-    "-ss", String(startTime),
-    "-i", videoPath,
-    "-t", String(durationSec),
-    "-c:v", "copy",
-    "-c:a", "copy",
-    "-map_metadata", "0",
+    "-ss",
+    String(startTime),
+    "-i",
+    videoPath,
+    "-t",
+    String(durationSec),
+    "-c:v",
+    "copy",
+    "-c:a",
+    "copy",
+    "-map_metadata",
+    "0",
     "-y",
     clippedVideoPath,
   ]);
 
   // 클립에서 오디오 추출
   await runFfmpeg([
-    "-i", clippedVideoPath,
+    "-i",
+    clippedVideoPath,
     "-vn",
-    "-acodec", "mp3",
+    "-acodec",
+    "mp3",
     "-y",
     audioPath,
   ]);
@@ -74,25 +78,59 @@ export async function clipAndExtractAudio(
 
 /**
  * 비디오 + 더빙 오디오 합성 (서버사이드 mux)
- * Android: 이미 클립된 webm + dubbed mp3
- * iOS: clipAndExtractAudio 후 클립된 비디오 + dubbed mp3
+ *
+ * Android: webm(VP8) 클립 + mp3 → webm 출력 (VP8 복사, 오디오 libopus 변환)
+ * iOS:     mp4/mov 클립 + mp3 → mp4 출력 (영상 스트림 복사)
+ *
+ * webm → mp4 direct copy는 VP8 호환 불가이므로 컨테이너를 입력에 맞춰 출력
  */
 export async function muxVideoWithAudio(
   videoPath: string,
   audioPath: string,
-): Promise<string> {
-  const outputPath = join(tmpdir(), `dubbai-mux-${Date.now()}.mp4`);
+): Promise<{ outputPath: string; mimeType: string }> {
+  const ext = videoPath.split(".").pop()?.toLowerCase() ?? "mp4";
+  const isWebm = ext === "webm";
+  const ts = Date.now();
 
-  await runFfmpeg([
-    "-i", videoPath,
-    "-i", audioPath,
-    "-map", "0:v:0",
-    "-map", "1:a:0",
-    "-c:v", "copy",
-    "-map_metadata", "0",
-    "-y",
-    outputPath,
-  ]);
-
-  return outputPath;
+  if (isWebm) {
+    // Android: VP8(webm) + mp3 → webm (오디오만 libopus 변환)
+    const outputPath = join(tmpdir(), `dubbai-mux-${ts}.webm`);
+    await runFfmpeg([
+      "-i",
+      videoPath,
+      "-i",
+      audioPath,
+      "-map",
+      "0:v:0",
+      "-map",
+      "1:a:0",
+      "-c:v",
+      "copy",
+      "-c:a",
+      "libopus",
+      "-y",
+      outputPath,
+    ]);
+    return { outputPath, mimeType: "video/webm" };
+  } else {
+    // iOS: mp4/mov + mp3 → mp4 (영상 스트림 복사)
+    const outputPath = join(tmpdir(), `dubbai-mux-${ts}.mp4`);
+    await runFfmpeg([
+      "-i",
+      videoPath,
+      "-i",
+      audioPath,
+      "-map",
+      "0:v:0",
+      "-map",
+      "1:a:0",
+      "-c:v",
+      "copy",
+      "-map_metadata",
+      "0",
+      "-y",
+      outputPath,
+    ]);
+    return { outputPath, mimeType: "video/mp4" };
+  }
 }

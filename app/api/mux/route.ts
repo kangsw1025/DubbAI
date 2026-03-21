@@ -67,16 +67,20 @@ export async function POST(req: NextRequest) {
       videoToMux = clippedVideoPath;
     }
 
-    const outputPath = await muxVideoWithAudio(videoToMux, audioPath);
+    const { outputPath, mimeType } = await muxVideoWithAudio(
+      videoToMux,
+      audioPath,
+    );
     tempPaths.push(outputPath);
 
     const outputBuffer = await readFile(outputPath);
+    const isWebm = mimeType === "video/webm";
 
     return new NextResponse(outputBuffer, {
       status: 200,
       headers: {
-        "Content-Type": "video/mp4",
-        "Content-Disposition": 'attachment; filename="dubbed.mp4"',
+        "Content-Type": mimeType,
+        "Content-Disposition": `attachment; filename="dubbed.${isWebm ? "webm" : "mp4"}"`,
         "Content-Length": String(outputBuffer.byteLength),
       },
     });
@@ -84,8 +88,6 @@ export async function POST(req: NextRequest) {
     const message = err instanceof Error ? err.message : "서버 오류";
     return NextResponse.json({ error: message }, { status: 500 });
   } finally {
-    await Promise.allSettled(
-      tempPaths.map((p) => unlink(p).catch(() => {})),
-    );
+    await Promise.allSettled(tempPaths.map((p) => unlink(p).catch(() => {})));
   }
 }
