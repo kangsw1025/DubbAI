@@ -9,9 +9,6 @@ import {
   isLowMemoryDevice,
 } from "@/lib/utils/deviceDetect";
 
-/** iOS에서 서버 mux 없이 오디오만 제공하는 파일 크기 임계값 (200MB) */
-const MAX_IOS_VIDEO_SIZE = 200 * 1024 * 1024;
-
 export function useDubbing() {
   const [status, setStatus] = useState<DubbingStatus>("idle");
   const [result, setResult] = useState<DubbingResult | null>(null);
@@ -168,8 +165,12 @@ export function useDubbing() {
         new File([dubbedBlob], "dubbed.mp3", { type: "audio/mpeg" }),
       );
 
-      const muxRes = await fetch("/api/mux", {
+      const muxUrl = process.env.NEXT_PUBLIC_MUX_URL + "/mux";
+      const muxToken = process.env.NEXT_PUBLIC_MUX_TOKEN ?? "";
+
+      const muxRes = await fetch(muxUrl, {
         method: "POST",
+        headers: { Authorization: `Bearer ${muxToken}` },
         body: muxFormData,
       });
 
@@ -222,15 +223,7 @@ export function useDubbing() {
     );
     const dubbedBlob = new Blob([audioBytes], { type: "audio/mpeg" });
 
-    // 3단계: 원본 비디오를 서버로 보내 클립 + mux
-    // 파일이 너무 크면 오디오만 제공
-    if (file.size > MAX_IOS_VIDEO_SIZE) {
-      setMediaUrl(URL.createObjectURL(dubbedBlob));
-      setIsVideo(false);
-      setStatus("success");
-      return;
-    }
-
+    // 3단계: 원본 비디오를 Railway로 보내 클립 + mux
     setStatus("muxing");
     try {
       const muxFormData = new FormData();
@@ -241,8 +234,12 @@ export function useDubbing() {
       );
       muxFormData.append("startTime", String(startTime));
 
-      const muxRes = await fetch("/api/mux", {
+      const muxUrl = process.env.NEXT_PUBLIC_MUX_URL + "/mux";
+      const muxToken = process.env.NEXT_PUBLIC_MUX_TOKEN ?? "";
+
+      const muxRes = await fetch(muxUrl, {
         method: "POST",
+        headers: { Authorization: `Bearer ${muxToken}` },
         body: muxFormData,
       });
 
