@@ -6,6 +6,7 @@ export interface DubbingResult {
 
 export type DubbingStatus =
   | "idle"
+  | "clipping"
   | "extracting"
   | "processing"
   | "muxing"
