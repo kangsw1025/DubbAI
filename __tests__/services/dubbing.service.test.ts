@@ -41,7 +41,7 @@ describe("Dubbing Service", () => {
 
     expect(result.transcript).toBe("Hello world");
     expect(result.translation).toBe("안녕하세요");
-    expect(Buffer.isBuffer(result.audioBuffer)).toBe(true);
+    expect(typeof result.audio).toBe("string"); // base64
     expect(elevenlabsService.transcribeAudio).toHaveBeenCalledTimes(1);
     expect(deeplService.translateText).toHaveBeenCalledWith("Hello world", "KO");
     expect(elevenlabsService.synthesizeSpeech).toHaveBeenCalledWith("안녕하세요");

@@ -36,15 +36,7 @@ export async function POST(req: NextRequest) {
       file.type,
       targetLanguage,
     );
-
-    return new NextResponse(new Uint8Array(result.audioBuffer), {
-      status: 200,
-      headers: {
-        "Content-Type": "audio/mpeg",
-        "X-Transcript": encodeURIComponent(result.transcript),
-        "X-Translation": encodeURIComponent(result.translation),
-      },
-    });
+    return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "서버 오류";
     return NextResponse.json({ error: message }, { status: 500 });
