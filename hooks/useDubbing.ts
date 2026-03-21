@@ -195,19 +195,28 @@ export function useDubbing() {
     targetLanguage: string,
     startTime: number,
   ) => {
-    // 1단계: AudioContext로 오디오 추출 (captureStream 없이)
+    // 1단계: Railway에서 ffmpeg으로 오디오 추출 (iOS autoplay 정책 우회)
     setStatus("extracting");
-    const { extractAudioContext } =
-      await import("@/lib/utils/extractAudioContext");
-    const audioBlob = await extractAudioContext(file, startTime);
+    const extractFormData = new FormData();
+    extractFormData.append("video", file);
+    extractFormData.append("startTime", String(startTime));
+
+    const muxUrl = process.env.NEXT_PUBLIC_MUX_URL ?? "";
+    const muxToken = process.env.NEXT_PUBLIC_MUX_TOKEN ?? "";
+
+    const extractRes = await fetch(`${muxUrl}/extract-audio`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${muxToken}` },
+      body: extractFormData,
+    });
+    if (!extractRes.ok) throw new Error("오디오 추출 실패");
+    const audioBlob = await extractRes.blob();
 
     // 2단계: 서버에서 STT + 번역 + TTS
     setStatus("processing");
-    const audioFile = new File(
-      [audioBlob],
-      `audio.${audioBlob.type.includes("mp4") ? "mp4" : "webm"}`,
-      { type: audioBlob.type },
-    );
+    const audioFile = new File([audioBlob], "audio.mp3", {
+      type: "audio/mpeg",
+    });
     const formData = new FormData();
     formData.append("file", audioFile);
     formData.append("targetLanguage", targetLanguage);
