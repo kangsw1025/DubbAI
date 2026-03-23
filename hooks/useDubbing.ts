@@ -44,8 +44,8 @@ export function useDubbing() {
       const lowMem = isLowMemoryDevice();
 
       if (!ios && captureOk && !lowMem && !android) {
-        // PC: 기존 방식 (captureStream + ffmpeg.wasm)
-        await dubVideoPC(file, targetLanguage, startTime);
+        // PC: ffmpeg.wasm으로 전체 오디오 추출 (클립 없음)
+        await dubVideoPC(file, targetLanguage);
       } else if (!ios && captureOk) {
         // Android / 저사양: captureStream 클립 + 서버 mux
         await dubVideoAndroid(file, targetLanguage, startTime);
@@ -86,22 +86,14 @@ export function useDubbing() {
     setStatus("success");
   };
 
-  /** PC: captureStream + ffmpeg.wasm (기존 방식 그대로) */
-  const dubVideoPC = async (
-    file: File,
-    targetLanguage: string,
-    startTime: number,
-  ) => {
-    setStatus("clipping");
-    const { clipVideo } = await import("@/lib/utils/clipVideo");
-    const { videoBlob, audioBlob } = await clipVideo(file, startTime);
+  /** PC: ffmpeg.wasm으로 전체 오디오 추출 후 더빙 (클립 없음) */
+  const dubVideoPC = async (file: File, targetLanguage: string) => {
+    setStatus("extracting");
+    const { extractAudioFromVideo } =
+      await import("@/lib/utils/extractAudioClient");
+    const audioFile = await extractAudioFromVideo(file);
 
     setStatus("processing");
-    const audioFile = new File(
-      [audioBlob],
-      `audio.${audioBlob.type.includes("ogg") ? "ogg" : "webm"}`,
-      { type: audioBlob.type },
-    );
     const formData = new FormData();
     formData.append("file", audioFile);
     formData.append("targetLanguage", targetLanguage);
@@ -118,12 +110,9 @@ export function useDubbing() {
     const dubbedBlob = new Blob([audioBytes], { type: "audio/mpeg" });
 
     setStatus("muxing");
-    const videoFile = new File([videoBlob], "clip.webm", {
-      type: videoBlob.type,
-    });
     try {
       const { muxAudioToVideo } = await import("@/lib/utils/muxAudioToVideo");
-      const finalVideo = await muxAudioToVideo(videoFile, dubbedBlob);
+      const finalVideo = await muxAudioToVideo(file, dubbedBlob);
       setMediaUrlAndRevokePrev(URL.createObjectURL(finalVideo));
     } catch {
       // ffmpeg.wasm 실패 시 오디오만 제공

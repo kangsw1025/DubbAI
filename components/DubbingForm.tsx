@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import type { DubbingFormProps, DubbingStatus } from "@/types";
 import { CLIP_SECONDS } from "@/lib/utils/clipVideo";
-import { isIOS } from "@/lib/utils/deviceDetect";
+import { isIOS, isAndroid } from "@/lib/utils/deviceDetect";
 
 const LANGUAGES = [
   { code: "KO", label: "한국어" },
@@ -15,9 +15,9 @@ const LANGUAGES = [
   { code: "ES", label: "스페인어" },
 ];
 
-// PC / Android: captureStream 기반
+// PC: ffmpeg.wasm 전체 오디오 추출
 const PC_STEPS: { key: DubbingStatus; label: string; desc: string }[] = [
-  { key: "clipping", label: "클립 준비", desc: "선택한 구간 녹화 중..." },
+  { key: "extracting", label: "오디오 추출", desc: "영상에서 음성 추출 중..." },
   { key: "processing", label: "더빙 처리", desc: "AI가 더빙 생성 중..." },
   { key: "muxing", label: "영상 합성", desc: "오디오를 영상에 합치는 중..." },
 ];
@@ -30,7 +30,7 @@ const IOS_STEPS: { key: DubbingStatus; label: string; desc: string }[] = [
 ];
 
 const PC_STEP_ORDER: DubbingStatus[] = [
-  "clipping",
+  "extracting",
   "processing",
   "muxing",
   "success",
@@ -184,7 +184,8 @@ export function DubbingForm({
   };
 
   const isVideoFile = file?.type.startsWith("video/") ?? false;
-  const needsClipUI = isVideoFile && videoDuration > CLIP_SECONDS;
+  const needsClipUI =
+    isVideoFile && videoDuration > CLIP_SECONDS && (isIOS() || isAndroid());
   const maxStart = Math.max(0, Math.floor(videoDuration) - CLIP_SECONDS);
   const endTime = Math.min(startTime + CLIP_SECONDS, videoDuration);
 
