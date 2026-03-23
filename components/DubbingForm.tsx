@@ -22,9 +22,9 @@ const PC_STEPS: { key: DubbingStatus; label: string; desc: string }[] = [
   { key: "muxing", label: "영상 합성", desc: "오디오를 영상에 합치는 중..." },
 ];
 
-// iOS: AudioContext 기반
+// iOS: MP4Box.js 클라이언트 크롭 기반
 const IOS_STEPS: { key: DubbingStatus; label: string; desc: string }[] = [
-  { key: "extracting", label: "오디오 추출", desc: "영상에서 음성 추출 중..." },
+  { key: "clipping", label: "영상 크롭", desc: "선택 구간 추출 중..." },
   { key: "processing", label: "더빙 처리", desc: "AI가 더빙 생성 중..." },
   { key: "muxing", label: "영상 합성", desc: "서버에서 영상 합치는 중..." },
 ];
@@ -36,7 +36,7 @@ const PC_STEP_ORDER: DubbingStatus[] = [
   "success",
 ];
 const IOS_STEP_ORDER: DubbingStatus[] = [
-  "extracting",
+  "clipping",
   "processing",
   "muxing",
   "success",
