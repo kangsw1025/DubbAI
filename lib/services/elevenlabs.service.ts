@@ -12,7 +12,7 @@ function getClient() {
   return _client;
 }
 
-const VOICE_ID = "9zMhK0orV1GKoaLUzkbe";
+const VOICE_ID = "1C5kbPxjyIHc1MneNxLy";
 const TTS_MODEL = "eleven_multilingual_v2";
 const STT_MODEL = "scribe_v1";
 
