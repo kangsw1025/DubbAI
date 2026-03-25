@@ -135,6 +135,10 @@ function formatTime(seconds: number) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
 export function DubbingForm({
   onSubmit,
   isProcessing,
@@ -143,6 +147,8 @@ export function DubbingForm({
   const [file, setFile] = useState<File | null>(null);
   const [targetLanguage, setTargetLanguage] = useState("EN-US");
   const [startTime, setStartTime] = useState(0);
+  const [endTime, setEndTime] = useState(0);
+  const [previewTime, setPreviewTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLVideoElement>(null);
@@ -150,8 +156,6 @@ export function DubbingForm({
 
   useEffect(() => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-    setStartTime(0);
-    setVideoDuration(0);
 
     if (!file || !file.type.startsWith("video/")) {
       previewUrlRef.current = null;
@@ -169,25 +173,73 @@ export function DubbingForm({
 
   const handleLoadedMetadata = () => {
     const dur = previewRef.current?.duration ?? 0;
-    if (isFinite(dur)) setVideoDuration(dur);
+    if (isFinite(dur) && dur > 0) {
+      setVideoDuration(dur);
+      setStartTime(0);
+      setEndTime(dur);
+      setPreviewTime(0);
+    }
   };
 
-  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const t = Number(e.target.value);
-    setStartTime(t);
-    if (previewRef.current) previewRef.current.currentTime = t;
+  const isMobile = isIOS() || isAndroid();
+  const maxClipDuration = isMobile ? CLIP_SECONDS : Number.POSITIVE_INFINITY;
+
+  const syncPreviewTime = (nextPreviewTime: number) => {
+    setPreviewTime(nextPreviewTime);
+    if (previewRef.current) {
+      previewRef.current.currentTime = nextPreviewTime;
+    }
+  };
+
+  const handleStartChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const nextStart = Number(e.target.value);
+    let nextEnd = endTime || videoDuration;
+
+    if (nextEnd <= nextStart) {
+      nextEnd = Math.min(videoDuration, nextStart + 1);
+    }
+    if (isMobile && nextEnd - nextStart > maxClipDuration) {
+      nextEnd = Math.min(videoDuration, nextStart + maxClipDuration);
+    }
+
+    setStartTime(nextStart);
+    setEndTime(nextEnd);
+    syncPreviewTime(clamp(previewTime, nextStart, nextEnd));
+  };
+
+  const handleEndChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const nextEnd = Number(e.target.value);
+    let nextStart = startTime;
+
+    if (nextEnd <= nextStart) {
+      nextStart = Math.max(0, nextEnd - 1);
+    }
+    if (isMobile && nextEnd - nextStart > maxClipDuration) {
+      nextStart = Math.max(0, nextEnd - maxClipDuration);
+    }
+
+    setStartTime(nextStart);
+    setEndTime(nextEnd);
+    syncPreviewTime(clamp(previewTime, nextStart, nextEnd));
+  };
+
+  const handlePreviewChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    syncPreviewTime(Number(e.target.value));
   };
 
   const handleSubmit = async () => {
     if (!file) return;
-    await onSubmit(file, targetLanguage, startTime);
+    await onSubmit(
+      file,
+      targetLanguage,
+      startTime,
+      isVideoFile && videoDuration > 0 ? endTime : 0,
+    );
   };
 
   const isVideoFile = file?.type.startsWith("video/") ?? false;
-  const needsClipUI =
-    isVideoFile && videoDuration > CLIP_SECONDS && (isIOS() || isAndroid());
-  const maxStart = Math.max(0, Math.floor(videoDuration) - CLIP_SECONDS);
-  const endTime = Math.min(startTime + CLIP_SECONDS, videoDuration);
+  const showClipUI = isVideoFile && videoDuration > 0;
+  const selectedDuration = Math.max(0, endTime - startTime);
 
   const activeStatuses: DubbingStatus[] = [
     "clipping",
@@ -232,7 +284,13 @@ export function DubbingForm({
           accept="audio/*,video/*"
           className="hidden"
           data-testid="file-input"
-          onChange={(e) => setFile(e.target.files?.[0] || null)}
+          onChange={(e) => {
+            setStartTime(0);
+            setEndTime(0);
+            setPreviewTime(0);
+            setVideoDuration(0);
+            setFile(e.target.files?.[0] || null);
+          }}
         />
       </div>
 
@@ -250,31 +308,88 @@ export function DubbingForm({
             ref={previewRef}
             className="w-full rounded-lg bg-black max-h-48 object-contain"
             onLoadedMetadata={handleLoadedMetadata}
-            controls={!needsClipUI}
+            controls
             muted
             playsInline
           />
-          {needsClipUI && (
+          {showClipUI && (
             <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-              <div className="flex justify-between text-xs text-gray-500 mb-1">
-                <span>시작 지점</span>
+              <div className="flex justify-between text-xs text-gray-500 mb-2">
+                <span>선택 구간</span>
                 <span className="font-medium text-blue-600">
-                  {formatTime(startTime)} ~ {formatTime(endTime)} (1분)
+                  {formatTime(startTime)} ~ {formatTime(endTime)} (
+                  {formatTime(selectedDuration)})
                 </span>
               </div>
-              <input
-                type="range"
-                min={0}
-                max={maxStart}
-                step={1}
-                value={startTime}
-                onChange={handleSliderChange}
-                className="w-full accent-blue-600"
-              />
-              <div className="flex justify-between text-xs text-gray-400 mt-1">
+              <div className="mb-3">
+                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                  <span>구간 선택</span>
+                  <span>
+                    {formatTime(startTime)} / {formatTime(endTime)}
+                  </span>
+                </div>
+                <div className="relative h-8 flex items-center">
+                  <div className="absolute inset-x-0 h-2 rounded-full bg-gray-200" />
+                  <div
+                    className="absolute h-2 rounded-full bg-blue-500"
+                    style={{
+                      left: `${(startTime / Math.max(videoDuration, 1)) * 100}%`,
+                      width: `${(selectedDuration / Math.max(videoDuration, 1)) * 100}%`,
+                    }}
+                  />
+                  <input
+                    type="range"
+                    min={0}
+                    max={Math.max(0, Math.floor(videoDuration - 1))}
+                    step={1}
+                    value={startTime}
+                    onChange={handleStartChange}
+                    aria-label="구간 시작 선택"
+                    className="absolute inset-x-0 w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-600 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-blue-600 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white"
+                  />
+                  <input
+                    type="range"
+                    min={1}
+                    max={Math.max(1, Math.ceil(videoDuration))}
+                    step={1}
+                    value={Math.max(1, Math.round(endTime))}
+                    onChange={handleEndChange}
+                    aria-label="구간 종료 선택"
+                    className="absolute inset-x-0 w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-600 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-blue-600 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white"
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                  <span>미리보기 위치</span>
+                  <span>{formatTime(previewTime)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={Math.floor(startTime)}
+                  max={Math.max(Math.floor(startTime) + 1, Math.ceil(endTime))}
+                  step={1}
+                  value={clamp(Math.round(previewTime), Math.floor(startTime), Math.max(Math.floor(startTime) + 1, Math.ceil(endTime)))}
+                  onChange={handlePreviewChange}
+                  aria-label="미리보기 위치 선택"
+                  className="w-full accent-blue-600"
+                />
+              </div>
+              <div className="flex justify-between text-xs text-gray-400 mt-2">
                 <span>0:00</span>
                 <span>{formatTime(videoDuration)}</span>
               </div>
+              {isMobile && (
+                <p className="text-xs text-gray-500 mt-2">
+                  모바일에서는 최대 {formatTime(CLIP_SECONDS)}까지 선택할 수
+                  있습니다.
+                </p>
+              )}
+              {selectedDuration <= 0 && (
+                <p className="text-xs text-red-500 mt-2">
+                  종료 시간은 시작 시간보다 뒤여야 합니다.
+                </p>
+              )}
             </div>
           )}
         </div>

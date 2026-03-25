@@ -18,6 +18,7 @@ export interface DubbingFormProps {
     file: File,
     targetLanguage: string,
     startTime: number,
+    endTime: number,
   ) => Promise<void>;
   isProcessing: boolean;
   dubbingStatus?: DubbingStatus;

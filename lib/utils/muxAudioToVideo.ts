@@ -9,6 +9,8 @@ const FFMPEG_BASE_URL = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/d
 export async function muxAudioToVideo(
   videoFile: File,
   dubbedAudioBlob: Blob,
+  startTime = 0,
+  endTime?: number,
 ): Promise<File> {
   const ffmpeg = new FFmpeg();
 
@@ -24,15 +26,22 @@ export async function muxAudioToVideo(
   });
 
   const ext = videoFile.name.split(".").pop() ?? "mp4";
+  const normalizedExt = ext.toLowerCase();
+  const isWebm = normalizedExt === "webm";
   const inputName = `input.${ext}`;
-  const outputName = `output.${ext}`;
+  const outputExt = isWebm ? "webm" : "mp4";
+  const outputName = `output.${outputExt}`;
+  const duration =
+    endTime !== undefined && endTime > startTime ? endTime - startTime : null;
 
   await ffmpeg.writeFile(inputName, await fetchFile(videoFile));
   await ffmpeg.writeFile("dubbed.mp3", await fetchFile(dubbedAudioBlob));
 
-  await ffmpeg.exec([
-    "-i",
-    inputName,
+  const args = ["-ss", String(startTime), "-i", inputName];
+  if (duration !== null) {
+    args.push("-t", String(duration));
+  }
+  args.push(
     "-i",
     "dubbed.mp3",
     "-map",
@@ -41,12 +50,18 @@ export async function muxAudioToVideo(
     "1:a:0",
     "-c:v",
     "copy",
-    "-y",
-    outputName,
-  ]);
+    "-shortest",
+  );
+  if (isWebm) {
+    args.push("-c:a", "libopus");
+  } else {
+    args.push("-c:a", "aac");
+  }
+  args.push("-y", outputName);
+  await ffmpeg.exec(args);
 
   const data = await ffmpeg.readFile(outputName);
-  return new File([data as BlobPart], `dubbed.${ext}`, {
-    type: videoFile.type,
+  return new File([data as BlobPart], `dubbed.${outputExt}`, {
+    type: isWebm ? "video/webm" : "video/mp4",
   });
 }

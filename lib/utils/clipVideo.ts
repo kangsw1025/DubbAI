@@ -7,7 +7,11 @@ export interface ClipResult {
   audioBlob: Blob;
 }
 
-export function clipVideo(file: File, startTime = 0): Promise<ClipResult> {
+export function clipVideo(
+  file: File,
+  startTime = 0,
+  endTime?: number,
+): Promise<ClipResult> {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
     const video = document.createElement("video");
@@ -44,12 +48,16 @@ export function clipVideo(file: File, startTime = 0): Promise<ClipResult> {
         return;
       }
 
-      const endTime =
-        startTime +
-        Math.min(
-          CLIP_SECONDS,
-          isFinite(video.duration) ? video.duration - startTime : CLIP_SECONDS,
-        );
+      const clipEndTime =
+        endTime !== undefined && endTime > startTime
+          ? endTime
+          : startTime +
+            Math.min(
+              CLIP_SECONDS,
+              isFinite(video.duration)
+                ? video.duration - startTime
+                : CLIP_SECONDS,
+            );
 
       const stream = getCaptureStream();
 
@@ -132,10 +140,10 @@ export function clipVideo(file: File, startTime = 0): Promise<ClipResult> {
       };
 
       video.addEventListener("timeupdate", () => {
-        if (video.currentTime >= endTime) stopAll();
+        if (video.currentTime >= clipEndTime) stopAll();
       });
       video.addEventListener("ended", stopAll);
-      setTimeout(stopAll, (endTime - startTime + 5) * 1000);
+      setTimeout(stopAll, (clipEndTime - startTime + 5) * 1000);
 
       videoRecorder.start(200);
       if (audioRecorder) audioRecorder.start(200);

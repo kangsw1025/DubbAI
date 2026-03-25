@@ -23,7 +23,12 @@ export function useDubbing() {
     });
   };
 
-  const dub = async (file: File, targetLanguage: string, startTime = 0) => {
+  const dub = async (
+    file: File,
+    targetLanguage: string,
+    startTime = 0,
+    endTime?: number,
+  ) => {
     setStatus("processing");
     setError(null);
     setResult(null);
@@ -44,14 +49,14 @@ export function useDubbing() {
       const lowMem = isLowMemoryDevice();
 
       if (!ios && captureOk && !lowMem && !android) {
-        // PC: ffmpeg.wasm으로 전체 오디오 추출 (클립 없음)
-        await dubVideoPC(file, targetLanguage);
+        // PC: ffmpeg.wasm으로 선택 구간 오디오 추출 + 합성
+        await dubVideoPC(file, targetLanguage, startTime, endTime);
       } else if (!ios && captureOk) {
         // Android / 저사양: captureStream 클립 + 서버 mux
-        await dubVideoAndroid(file, targetLanguage, startTime);
+        await dubVideoAndroid(file, targetLanguage, startTime, endTime);
       } else {
-        // iOS (또는 captureStream 미지원): AudioContext + 서버 mux
-        await dubVideoIOS(file, targetLanguage, startTime);
+        // iOS (또는 captureStream 미지원): 서버 prepare + mux-session
+        await dubVideoIOS(file, targetLanguage, startTime, endTime);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "알 수 없는 오류");
@@ -86,12 +91,17 @@ export function useDubbing() {
     setStatus("success");
   };
 
-  /** PC: ffmpeg.wasm으로 전체 오디오 추출 후 더빙 (클립 없음) */
-  const dubVideoPC = async (file: File, targetLanguage: string) => {
+  /** PC: ffmpeg.wasm으로 선택 구간 오디오 추출 후 더빙 */
+  const dubVideoPC = async (
+    file: File,
+    targetLanguage: string,
+    startTime: number,
+    endTime?: number,
+  ) => {
     setStatus("extracting");
     const { extractAudioFromVideo } =
       await import("@/lib/utils/extractAudioClient");
-    const audioFile = await extractAudioFromVideo(file);
+    const audioFile = await extractAudioFromVideo(file, startTime, endTime);
 
     setStatus("processing");
     const formData = new FormData();
@@ -112,10 +122,14 @@ export function useDubbing() {
     setStatus("muxing");
     try {
       const { muxAudioToVideo } = await import("@/lib/utils/muxAudioToVideo");
-      const finalVideo = await muxAudioToVideo(file, dubbedBlob);
+      const finalVideo = await muxAudioToVideo(
+        file,
+        dubbedBlob,
+        startTime,
+        endTime,
+      );
       setMediaUrlAndRevokePrev(URL.createObjectURL(finalVideo));
     } catch {
-      // ffmpeg.wasm 실패 시 오디오만 제공
       setMediaUrlAndRevokePrev(URL.createObjectURL(dubbedBlob));
       setIsVideo(false);
     }
@@ -128,10 +142,11 @@ export function useDubbing() {
     file: File,
     targetLanguage: string,
     startTime: number,
+    endTime?: number,
   ) => {
     setStatus("clipping");
     const { clipVideo } = await import("@/lib/utils/clipVideo");
-    const { videoBlob, audioBlob } = await clipVideo(file, startTime);
+    const { videoBlob, audioBlob } = await clipVideo(file, startTime, endTime);
 
     setStatus("processing");
     const audioFile = new File(
@@ -182,7 +197,6 @@ export function useDubbing() {
       const muxedBlob = new Blob([muxedBuffer], { type: mimeType });
       setMediaUrlAndRevokePrev(URL.createObjectURL(muxedBlob));
     } catch {
-      // mux 실패 시 오디오만 제공
       setMediaUrlAndRevokePrev(URL.createObjectURL(dubbedBlob));
       setIsVideo(false);
     }
@@ -195,6 +209,7 @@ export function useDubbing() {
     file: File,
     targetLanguage: string,
     startTime: number,
+    endTime?: number,
   ) => {
     const { url: muxUrl, token: muxToken } = await getMuxConfig();
 
@@ -203,6 +218,9 @@ export function useDubbing() {
     const prepareFormData = new FormData();
     prepareFormData.append("video", file);
     prepareFormData.append("startTime", String(startTime));
+    if (endTime !== undefined && endTime > startTime) {
+      prepareFormData.append("endTime", String(endTime));
+    }
 
     const prepareRes = await fetch(`${muxUrl}/prepare`, {
       method: "POST",
@@ -245,6 +263,9 @@ export function useDubbing() {
       );
       muxFormData.append("sessionId", sessionId);
       muxFormData.append("startTime", String(startTime));
+      if (endTime !== undefined && endTime > startTime) {
+        muxFormData.append("endTime", String(endTime));
+      }
 
       const muxRes = await fetch(`${muxUrl}/mux-session`, {
         method: "POST",
@@ -259,7 +280,6 @@ export function useDubbing() {
       const muxedBlob = new Blob([muxedBuffer], { type: mimeType });
       setMediaUrlAndRevokePrev(URL.createObjectURL(muxedBlob));
     } catch {
-      // mux 실패 시 오디오만 제공
       setMediaUrlAndRevokePrev(URL.createObjectURL(dubbedBlob));
       setIsVideo(false);
     }
