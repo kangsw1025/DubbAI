@@ -53,6 +53,33 @@ export function useDubbing() {
     return fallback;
   };
 
+  const buildUserErrorMessage = (
+    err: unknown,
+    options: { ios: boolean; fileIsVideo: boolean },
+  ) => {
+    const rawMessage = err instanceof Error ? err.message : "알 수 없는 오류";
+
+    if (options.ios && options.fileIsVideo) {
+      const likelyClipFailure =
+        rawMessage.includes("클립") ||
+        rawMessage.includes("MediaRecorder") ||
+        rawMessage.includes("AudioContext") ||
+        rawMessage.includes("재생 실패") ||
+        rawMessage.includes("mux");
+
+      if (likelyClipFailure) {
+        return [
+          "iOS 영상 1분 클립 처리에 실패했습니다.",
+          "네트워크 상태를 확인한 뒤 다시 시도해 주세요.",
+          "같은 문제가 반복되면 100MB 이하 또는 해상도를 낮춘 영상으로 시도해 주세요.",
+          `원인: ${rawMessage}`,
+        ].join(" ");
+      }
+    }
+
+    return rawMessage;
+  };
+
   const dub = async (
     file: File,
     targetLanguage: string,
@@ -85,21 +112,20 @@ export function useDubbing() {
         // Android / 저사양: captureStream 클립 + 서버 mux
         await dubVideoAndroid(file, targetLanguage, startTime, endTime);
       } else if (ios) {
-        try {
-          logIOS("try client-clip path");
-          // iOS 17+: 클라이언트 청크 스트리밍 클립 우선 시도
-          await dubVideoIOSClientClip(file, targetLanguage, startTime, endTime);
-        } catch {
-          logIOS("client-clip failed, fallback to prepare/mux-session");
-          // 실패 시 기존 서버 세션 경로로 자동 폴백
-          await dubVideoIOS(file, targetLanguage, startTime, endTime);
-        }
+        logIOS("try client-clip path (no prepare fallback)");
+        // iOS 17+: 클라이언트 청크 스트리밍 클립만 허용
+        // 실패 시 prepare 경로로 내리지 않고 즉시 에러 처리
+        await dubVideoIOSClientClip(file, targetLanguage, startTime, endTime);
       } else {
         // 기타 captureStream 미지원 환경: 서버 prepare + mux-session
         await dubVideoIOS(file, targetLanguage, startTime, endTime);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "알 수 없는 오류");
+      const userMessage = buildUserErrorMessage(err, {
+        ios: isIOS(),
+        fileIsVideo,
+      });
+      setError(userMessage);
       setStatus("error");
     }
   };
