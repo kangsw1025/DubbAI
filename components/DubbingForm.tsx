@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import type { DubbingFormProps, DubbingStatus } from "@/types";
 import { CLIP_SECONDS } from "@/lib/utils/clipVideo";
 import { isIOS, isAndroid } from "@/lib/utils/deviceDetect";
@@ -144,6 +145,7 @@ export function DubbingForm({
   isProcessing,
   dubbingStatus,
 }: DubbingFormProps) {
+  const timelineRef = useRef<HTMLDivElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [targetLanguage, setTargetLanguage] = useState("EN-US");
   const [startTime, setStartTime] = useState(0);
@@ -153,6 +155,7 @@ export function DubbingForm({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLVideoElement>(null);
   const previewUrlRef = useRef<string | null>(null);
+  const activeDragRef = useRef<"start" | "playhead" | "end" | null>(null);
 
   useEffect(() => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
@@ -191,42 +194,6 @@ export function DubbingForm({
     }
   };
 
-  const handleStartChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const nextStart = Number(e.target.value);
-    let nextEnd = endTime || videoDuration;
-
-    if (nextEnd <= nextStart) {
-      nextEnd = Math.min(videoDuration, nextStart + 1);
-    }
-    if (isMobile && nextEnd - nextStart > maxClipDuration) {
-      nextEnd = Math.min(videoDuration, nextStart + maxClipDuration);
-    }
-
-    setStartTime(nextStart);
-    setEndTime(nextEnd);
-    syncPreviewTime(clamp(previewTime, nextStart, nextEnd));
-  };
-
-  const handleEndChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const nextEnd = Number(e.target.value);
-    let nextStart = startTime;
-
-    if (nextEnd <= nextStart) {
-      nextStart = Math.max(0, nextEnd - 1);
-    }
-    if (isMobile && nextEnd - nextStart > maxClipDuration) {
-      nextStart = Math.max(0, nextEnd - maxClipDuration);
-    }
-
-    setStartTime(nextStart);
-    setEndTime(nextEnd);
-    syncPreviewTime(clamp(previewTime, nextStart, nextEnd));
-  };
-
-  const handlePreviewChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    syncPreviewTime(Number(e.target.value));
-  };
-
   const handleSubmit = async () => {
     if (!file) return;
     await onSubmit(
@@ -240,6 +207,159 @@ export function DubbingForm({
   const isVideoFile = file?.type.startsWith("video/") ?? false;
   const showClipUI = isVideoFile && videoDuration > 0;
   const selectedDuration = Math.max(0, endTime - startTime);
+  const timelineDivisor = Math.max(videoDuration, 1);
+  const segmentStartPercent = (startTime / timelineDivisor) * 100;
+  const segmentEndPercent = (endTime / timelineDivisor) * 100;
+  const playheadPercent =
+    (clamp(previewTime, startTime, endTime) / timelineDivisor) * 100;
+  const bubbleAlignment =
+    playheadPercent <= segmentStartPercent + 4
+      ? "left"
+      : playheadPercent >= segmentEndPercent - 4
+        ? "right"
+        : "center";
+
+  const timeFromClientX = (clientX: number) => {
+    const timeline = timelineRef.current;
+    if (!timeline) return 0;
+    if (!Number.isFinite(clientX)) return 0;
+
+    const rect = timeline.getBoundingClientRect();
+    if (rect.width <= 0) return 0;
+
+    const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
+    return Math.round(ratio * videoDuration);
+  };
+
+  useEffect(() => {
+    if (!showClipUI) return;
+
+    const processDrag = (clientX: number) => {
+      const dragType = activeDragRef.current;
+      if (!dragType) return;
+
+      const rawTime = timeFromClientX(clientX);
+
+      if (dragType === "start") {
+        let nextStart = clamp(rawTime, 0, Math.max(endTime - 1, 0));
+        let nextEnd = endTime;
+        let nextPreviewTime = previewTime;
+
+        if (isMobile && nextEnd - nextStart > maxClipDuration) {
+          nextEnd = Math.min(videoDuration, nextStart + maxClipDuration);
+        }
+        if (nextPreviewTime < nextStart) {
+          nextPreviewTime = nextStart;
+        }
+
+        setStartTime(nextStart);
+        setEndTime(nextEnd);
+        syncPreviewTime(clamp(nextPreviewTime, nextStart, nextEnd));
+        return;
+      }
+
+      if (dragType === "end") {
+        let nextEnd = clamp(rawTime, startTime + 1, videoDuration);
+        let nextStart = startTime;
+        let nextPreviewTime = previewTime;
+
+        if (isMobile && nextEnd - nextStart > maxClipDuration) {
+          nextStart = Math.max(0, nextEnd - maxClipDuration);
+        }
+        if (nextPreviewTime > nextEnd) {
+          nextPreviewTime = nextEnd;
+        }
+
+        setStartTime(nextStart);
+        setEndTime(nextEnd);
+        syncPreviewTime(clamp(nextPreviewTime, nextStart, nextEnd));
+        return;
+      }
+
+      const nextPreviewTime = clamp(rawTime, startTime, endTime);
+      syncPreviewTime(nextPreviewTime);
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      processDrag(event.clientX);
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      processDrag(event.clientX);
+    };
+
+    const handlePointerUp = () => {
+      activeDragRef.current = null;
+    };
+
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", handlePointerUp);
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handlePointerUp);
+
+    return () => {
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", handlePointerUp);
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handlePointerUp);
+    };
+  }, [
+    endTime,
+    isMobile,
+    maxClipDuration,
+    previewTime,
+    showClipUI,
+    startTime,
+    videoDuration,
+  ]);
+
+  const beginDrag =
+    (dragType: "start" | "playhead" | "end") =>
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      activeDragRef.current = dragType;
+    };
+
+  useEffect(() => {
+    const video = previewRef.current;
+    if (!video || !showClipUI) return;
+
+    const handleTimeUpdate = () => {
+      const nextTime = clamp(video.currentTime, startTime, endTime);
+      if (video.currentTime >= endTime) {
+        video.currentTime = endTime;
+        video.pause();
+      }
+      setPreviewTime(nextTime);
+    };
+
+    const handlePlay = () => {
+      if (video.currentTime < startTime || video.currentTime > endTime) {
+        video.currentTime = startTime;
+        setPreviewTime(startTime);
+      }
+    };
+
+    const handleSeeked = () => {
+      if (video.currentTime < startTime || video.currentTime > endTime) {
+        const nextTime = clamp(video.currentTime, startTime, endTime);
+        video.currentTime = nextTime;
+        setPreviewTime(nextTime);
+        return;
+      }
+      setPreviewTime(video.currentTime);
+    };
+
+    video.addEventListener("timeupdate", handleTimeUpdate);
+    video.addEventListener("play", handlePlay);
+    video.addEventListener("seeked", handleSeeked);
+
+    return () => {
+      video.removeEventListener("timeupdate", handleTimeUpdate);
+      video.removeEventListener("play", handlePlay);
+      video.removeEventListener("seeked", handleSeeked);
+    };
+  }, [startTime, endTime, showClipUI]);
 
   const activeStatuses: DubbingStatus[] = [
     "clipping",
@@ -316,64 +436,69 @@ export function DubbingForm({
             <div className="mt-3 p-3 bg-gray-50 rounded-lg">
               <div className="flex justify-between text-xs text-gray-500 mb-2">
                 <span>선택 구간</span>
-                <span className="font-medium text-blue-600">
+                <span
+                  className="font-medium text-blue-600"
+                  data-testid="selection-summary"
+                >
                   {formatTime(startTime)} ~ {formatTime(endTime)} (
                   {formatTime(selectedDuration)})
                 </span>
               </div>
               <div className="mb-3">
-                <div className="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>구간 선택</span>
-                  <span>
-                    {formatTime(startTime)} / {formatTime(endTime)}
-                  </span>
-                </div>
-                <div className="relative h-8 flex items-center">
+                <div
+                  ref={timelineRef}
+                  className="relative h-8 touch-none flex items-center"
+                  data-testid="timeline-track"
+                >
                   <div className="absolute inset-x-0 h-2 rounded-full bg-gray-200" />
                   <div
                     className="absolute h-2 rounded-full bg-blue-500"
                     style={{
-                      left: `${(startTime / Math.max(videoDuration, 1)) * 100}%`,
-                      width: `${(selectedDuration / Math.max(videoDuration, 1)) * 100}%`,
+                      left: `${segmentStartPercent}%`,
+                      width: `${(selectedDuration / timelineDivisor) * 100}%`,
                     }}
                   />
-                  <input
-                    type="range"
-                    min={0}
-                    max={Math.max(0, Math.floor(videoDuration - 1))}
-                    step={1}
-                    value={startTime}
-                    onChange={handleStartChange}
+                  <button
+                    type="button"
+                    onPointerDown={beginDrag("playhead")}
+                    aria-label="미리보기 헤드 선택"
+                    data-testid="playhead-handle"
+                    className="absolute top-1/2 touch-none -translate-y-1/2"
+                    style={{
+                      left: `${playheadPercent}%`,
+                    }}
+                  >
+                    <div
+                      className={`absolute bottom-3 rounded bg-red-500 px-1.5 py-0.5 text-[10px] font-medium text-white whitespace-nowrap ${
+                        bubbleAlignment === "left"
+                          ? "left-0"
+                          : bubbleAlignment === "right"
+                            ? "right-0 -translate-x-full"
+                            : "left-1/2 -translate-x-1/2"
+                      }`}
+                      data-testid="playhead-time-label"
+                    >
+                      {formatTime(previewTime)}
+                    </div>
+                    <div className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 bg-red-500" />
+                  </button>
+                  <button
+                    type="button"
+                    onPointerDown={beginDrag("start")}
                     aria-label="구간 시작 선택"
-                    className="absolute inset-x-0 w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-600 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-blue-600 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white"
+                    data-testid="start-handle"
+                    className="absolute top-1/2 h-5 w-2 touch-none -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-blue-600 shadow-sm"
+                    style={{ left: `${segmentStartPercent}%` }}
                   />
-                  <input
-                    type="range"
-                    min={1}
-                    max={Math.max(1, Math.ceil(videoDuration))}
-                    step={1}
-                    value={Math.max(1, Math.round(endTime))}
-                    onChange={handleEndChange}
+                  <button
+                    type="button"
+                    onPointerDown={beginDrag("end")}
                     aria-label="구간 종료 선택"
-                    className="absolute inset-x-0 w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-600 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-blue-600 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white"
+                    data-testid="end-handle"
+                    className="absolute top-1/2 h-5 w-2 touch-none -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-blue-600 shadow-sm"
+                    style={{ left: `${segmentEndPercent}%` }}
                   />
                 </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>미리보기 위치</span>
-                  <span>{formatTime(previewTime)}</span>
-                </div>
-                <input
-                  type="range"
-                  min={Math.floor(startTime)}
-                  max={Math.max(Math.floor(startTime) + 1, Math.ceil(endTime))}
-                  step={1}
-                  value={clamp(Math.round(previewTime), Math.floor(startTime), Math.max(Math.floor(startTime) + 1, Math.ceil(endTime)))}
-                  onChange={handlePreviewChange}
-                  aria-label="미리보기 위치 선택"
-                  className="w-full accent-blue-600"
-                />
               </div>
               <div className="flex justify-between text-xs text-gray-400 mt-2">
                 <span>0:00</span>
