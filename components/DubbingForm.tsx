@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { DubbingFormProps, DubbingStatus } from "@/types";
 import { CLIP_SECONDS } from "@/lib/utils/clipVideo";
@@ -213,17 +213,20 @@ export function DubbingForm({
   const playheadPercent =
     (clamp(previewTime, startTime, endTime) / timelineDivisor) * 100;
 
-  const timeFromClientX = (clientX: number) => {
-    const timeline = timelineRef.current;
-    if (!timeline) return 0;
-    if (!Number.isFinite(clientX)) return 0;
+  const timeFromClientX = useCallback(
+    (clientX: number) => {
+      const timeline = timelineRef.current;
+      if (!timeline) return 0;
+      if (!Number.isFinite(clientX)) return 0;
 
-    const rect = timeline.getBoundingClientRect();
-    if (rect.width <= 0) return 0;
+      const rect = timeline.getBoundingClientRect();
+      if (rect.width <= 0) return 0;
 
-    const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
-    return Math.round(ratio * videoDuration);
-  };
+      const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
+      return Math.round(ratio * videoDuration);
+    },
+    [videoDuration],
+  );
 
   useEffect(() => {
     if (!showClipUI) return;
@@ -235,7 +238,7 @@ export function DubbingForm({
       const rawTime = timeFromClientX(clientX);
 
       if (dragType === "start") {
-        let nextStart = clamp(rawTime, 0, Math.max(endTime - 1, 0));
+        const nextStart = clamp(rawTime, 0, Math.max(endTime - 1, 0));
         let nextEnd = endTime;
         let nextPreviewTime = previewTime;
 
@@ -253,7 +256,7 @@ export function DubbingForm({
       }
 
       if (dragType === "end") {
-        let nextEnd = clamp(rawTime, startTime + 1, videoDuration);
+        const nextEnd = clamp(rawTime, startTime + 1, videoDuration);
         let nextStart = startTime;
         let nextPreviewTime = previewTime;
 
@@ -304,6 +307,7 @@ export function DubbingForm({
     previewTime,
     showClipUI,
     startTime,
+    timeFromClientX,
     videoDuration,
   ]);
 
