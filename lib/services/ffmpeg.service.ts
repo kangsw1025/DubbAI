@@ -11,10 +11,18 @@ function runFfmpeg(args: string[]): Promise<void> {
     }
 
     const proc = spawn(ffmpegPath, args);
+    let stderr = "";
+
+    proc.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
 
     proc.on("close", (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`ffmpeg exited with code ${code}`));
+      else {
+        const detail = stderr ? `: ${stderr}` : "";
+        reject(new Error(`ffmpeg exited with code ${code}${detail}`));
+      }
     });
 
     proc.on("error", reject);
@@ -115,22 +123,55 @@ export async function muxVideoWithAudio(
   } else {
     // iOS: mp4/mov + mp3 → mp4 (영상 스트림 복사)
     const outputPath = join(tmpdir(), `dubbai-mux-${ts}.mp4`);
-    await runFfmpeg([
-      "-i",
-      videoPath,
-      "-i",
-      audioPath,
-      "-map",
-      "0:v:0",
-      "-map",
-      "1:a:0",
-      "-c:v",
-      "copy",
-      "-map_metadata",
-      "0",
-      "-y",
-      outputPath,
-    ]);
+    try {
+      await runFfmpeg([
+        "-i",
+        videoPath,
+        "-i",
+        audioPath,
+        "-map",
+        "0:v:0",
+        "-map",
+        "1:a:0",
+        "-c:v",
+        "copy",
+        "-c:a",
+        "aac",
+        "-shortest",
+        "-movflags",
+        "+faststart",
+        "-map_metadata",
+        "0",
+        "-y",
+        outputPath,
+      ]);
+    } catch {
+      await runFfmpeg([
+        "-i",
+        videoPath,
+        "-i",
+        audioPath,
+        "-map",
+        "0:v:0",
+        "-map",
+        "1:a:0",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "23",
+        "-c:a",
+        "aac",
+        "-shortest",
+        "-movflags",
+        "+faststart",
+        "-map_metadata",
+        "0",
+        "-y",
+        outputPath,
+      ]);
+    }
     return { outputPath, mimeType: "video/mp4" };
   }
 }

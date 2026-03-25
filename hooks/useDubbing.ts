@@ -23,6 +23,14 @@ export function useDubbing() {
     });
   };
 
+  const logIOS = (message: string, detail?: unknown) => {
+    if (detail !== undefined) {
+      console.info(`[dubbing:ios] ${message}`, detail);
+      return;
+    }
+    console.info(`[dubbing:ios] ${message}`);
+  };
+
   const clipDuration = (startTime: number, endTime?: number) => {
     if (endTime !== undefined && endTime > startTime) {
       return Math.max(1, endTime - startTime);
@@ -78,9 +86,11 @@ export function useDubbing() {
         await dubVideoAndroid(file, targetLanguage, startTime, endTime);
       } else if (ios) {
         try {
+          logIOS("try client-clip path");
           // iOS 17+: 클라이언트 청크 스트리밍 클립 우선 시도
           await dubVideoIOSClientClip(file, targetLanguage, startTime, endTime);
         } catch {
+          logIOS("client-clip failed, fallback to prepare/mux-session");
           // 실패 시 기존 서버 세션 경로로 자동 폴백
           await dubVideoIOS(file, targetLanguage, startTime, endTime);
         }
@@ -259,6 +269,7 @@ export function useDubbing() {
     const abortClipSession = async () => {
       if (!clipSessionId) return;
       try {
+        logIOS("clip-session abort request", { clipSessionId });
         await fetch(`${muxUrl}/clip-session/abort`, {
           method: "POST",
           headers: {
@@ -267,13 +278,15 @@ export function useDubbing() {
           },
           body: JSON.stringify({ sessionId: clipSessionId }),
         });
+        logIOS("clip-session aborted", { clipSessionId });
       } catch {
-        // noop
+        logIOS("clip-session abort failed (ignored)");
       }
     };
 
     try {
       setStatus("clipping");
+      logIOS("clip-session init start");
       const initRes = await fetch(`${muxUrl}/clip-session/init`, {
         method: "POST",
         headers: {
@@ -291,7 +304,9 @@ export function useDubbing() {
         throw new Error("클립 세션 ID를 받지 못했습니다.");
       }
       clipSessionId = initData.sessionId;
+      logIOS("clip-session init success", { clipSessionId });
 
+      let uploadedChunks = 0;
       const clipInfo = await streamClipVideoIOS(
         file,
         startTime,
@@ -317,9 +332,20 @@ export function useDubbing() {
               await extractErrorMessage(chunkRes, "클립 청크 업로드 실패"),
             );
           }
+          uploadedChunks += 1;
         },
       );
+      logIOS("clip-session chunk upload done", {
+        uploadedChunks,
+        totalChunks: clipInfo.totalChunks,
+        container: clipInfo.container,
+      });
 
+      logIOS("clip-session complete start", {
+        clipSessionId,
+        totalChunks: clipInfo.totalChunks,
+        container: clipInfo.container,
+      });
       const completeRes = await fetch(`${muxUrl}/clip-session/complete`, {
         method: "POST",
         headers: {
@@ -337,13 +363,19 @@ export function useDubbing() {
           await extractErrorMessage(completeRes, "클립 업로드 완료 처리 실패"),
         );
       }
+      logIOS("clip-session complete success", { clipSessionId });
 
       setStatus("extracting");
+      logIOS("extractAudioContext start", {
+        startTime,
+        duration: clipInfo.durationSec || clipDuration(startTime, endTime),
+      });
       const audioBlob = await extractAudioContext(
         file,
         startTime,
         clipInfo.durationSec || clipDuration(startTime, endTime),
       );
+      logIOS("extractAudioContext success", { size: audioBlob.size });
 
       setStatus("processing");
       const audioFile = new File([audioBlob], "audio.mp3", {
@@ -356,6 +388,7 @@ export function useDubbing() {
       const res = await fetch("/api/dub", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "더빙 중 오류가 발생했습니다.");
+      logIOS("/api/dub success");
 
       setResult(data);
 
@@ -365,6 +398,7 @@ export function useDubbing() {
       const dubbedBlob = new Blob([audioBytes], { type: "audio/mpeg" });
 
       setStatus("muxing");
+      logIOS("mux-clip-session start", { clipSessionId });
       const muxFormData = new FormData();
       muxFormData.append(
         "audio",
@@ -380,6 +414,7 @@ export function useDubbing() {
       if (!muxRes.ok) {
         throw new Error(await extractErrorMessage(muxRes, "mux 실패"));
       }
+      logIOS("mux-clip-session success");
 
       const mimeType = muxRes.headers.get("Content-Type") ?? "video/mp4";
       const muxedBuffer = await muxRes.arrayBuffer();
@@ -387,6 +422,7 @@ export function useDubbing() {
       setMediaUrlAndRevokePrev(URL.createObjectURL(muxedBlob));
       setStatus("success");
     } catch (err) {
+      logIOS("client-clip path failed", err);
       await abortClipSession();
       throw err;
     }
@@ -400,6 +436,7 @@ export function useDubbing() {
     endTime?: number,
   ) => {
     const { url: muxUrl, token: muxToken } = await getMuxConfig();
+    logIOS("fallback prepare path start");
 
     // 1단계: Railway /prepare — 영상 1회 업로드, 오디오 추출 + 세션 보관
     setStatus("extracting");
@@ -416,6 +453,7 @@ export function useDubbing() {
       body: prepareFormData,
     });
     if (!prepareRes.ok) throw new Error("오디오 추출 실패");
+    logIOS("fallback prepare success");
 
     const sessionId = prepareRes.headers.get("X-Session-Id");
     if (!sessionId) throw new Error("세션 ID를 받지 못했습니다.");
@@ -433,6 +471,7 @@ export function useDubbing() {
     const res = await fetch("/api/dub", { method: "POST", body: formData });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "더빙 중 오류가 발생했습니다.");
+    logIOS("fallback /api/dub success");
 
     setResult(data);
 
@@ -462,12 +501,14 @@ export function useDubbing() {
       });
 
       if (!muxRes.ok) throw new Error("mux 실패");
+      logIOS("fallback mux-session success");
 
       const mimeType = muxRes.headers.get("Content-Type") ?? "video/mp4";
       const muxedBuffer = await muxRes.arrayBuffer();
       const muxedBlob = new Blob([muxedBuffer], { type: mimeType });
       setMediaUrlAndRevokePrev(URL.createObjectURL(muxedBlob));
     } catch {
+      logIOS("fallback mux-session failed, return audio only");
       setMediaUrlAndRevokePrev(URL.createObjectURL(dubbedBlob));
       setIsVideo(false);
     }
