@@ -212,12 +212,6 @@ export function DubbingForm({
   const segmentEndPercent = (endTime / timelineDivisor) * 100;
   const playheadPercent =
     (clamp(previewTime, startTime, endTime) / timelineDivisor) * 100;
-  const bubbleAlignment =
-    playheadPercent <= segmentStartPercent + 4
-      ? "left"
-      : playheadPercent >= segmentEndPercent - 4
-        ? "right"
-        : "center";
 
   const timeFromClientX = (clientX: number) => {
     const timeline = timelineRef.current;
@@ -463,24 +457,18 @@ export function DubbingForm({
                     onPointerDown={beginDrag("playhead")}
                     aria-label="미리보기 헤드 선택"
                     data-testid="playhead-handle"
-                    className="absolute top-1/2 touch-none -translate-y-1/2"
+                    className="absolute top-1/2 touch-none -translate-x-1/2 -translate-y-1/2"
                     style={{
                       left: `${playheadPercent}%`,
                     }}
                   >
                     <div
-                      className={`absolute bottom-3 rounded bg-red-500 px-1.5 py-0.5 text-[10px] font-medium text-white whitespace-nowrap ${
-                        bubbleAlignment === "left"
-                          ? "left-0"
-                          : bubbleAlignment === "right"
-                            ? "right-0 -translate-x-full"
-                            : "left-1/2 -translate-x-1/2"
-                      }`}
+                      className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded bg-red-500 px-1.5 py-0.5 text-[10px] font-medium text-white whitespace-nowrap"
                       data-testid="playhead-time-label"
                     >
                       {formatTime(previewTime)}
                     </div>
-                    <div className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 bg-red-500" />
+                    <div className="absolute left-1/2 top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-red-500" />
                   </button>
                   <button
                     type="button"
