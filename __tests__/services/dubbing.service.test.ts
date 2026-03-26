@@ -1,7 +1,6 @@
 import { dubFile } from "@/lib/services/dubbing.service";
 import * as elevenlabsService from "@/lib/services/elevenlabs.service";
 import * as deeplService from "@/lib/services/deepl.service";
-import { extractAudioFromVideo } from "@/lib/services/ffmpeg.service";
 
 // Mock underlying packages first to prevent constructor errors on module load
 jest.mock("@elevenlabs/elevenlabs-js", () => ({
@@ -49,6 +48,7 @@ describe("Dubbing Service", () => {
   });
 
   it("비디오 파일 시 오디오 추출을 먼저 실행해야 한다", async () => {
+    const { extractAudioFromVideo } = require("@/lib/services/ffmpeg.service");
     (elevenlabsService.transcribeAudio as jest.Mock).mockResolvedValue("text");
     (deeplService.translateText as jest.Mock).mockResolvedValue("텍스트");
     (elevenlabsService.synthesizeSpeech as jest.Mock).mockResolvedValue(Buffer.from("audio"));

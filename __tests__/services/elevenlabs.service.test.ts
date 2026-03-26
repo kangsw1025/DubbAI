@@ -76,7 +76,7 @@ describe("ElevenLabs Service", () => {
       expect(result).toBeInstanceOf(Buffer);
       expect(result.length).toBeGreaterThan(0);
       expect(mockTTS).toHaveBeenCalledWith(
-        "1C5kbPxjyIHc1MneNxLy",
+        "9zMhK0orV1GKoaLUzkbe",
         expect.objectContaining({ text: "Hello world" }),
       );
     });
