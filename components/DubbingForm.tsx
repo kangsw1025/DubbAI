@@ -177,9 +177,10 @@ export function DubbingForm({
   const handleLoadedMetadata = () => {
     const dur = previewRef.current?.duration ?? 0;
     if (isFinite(dur) && dur > 0) {
+      const initialEndTime = isMobile ? Math.min(dur, CLIP_SECONDS) : dur;
       setVideoDuration(dur);
       setStartTime(0);
-      setEndTime(dur);
+      setEndTime(initialEndTime);
       setPreviewTime(0);
     }
   };
