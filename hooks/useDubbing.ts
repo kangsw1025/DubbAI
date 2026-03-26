@@ -31,13 +31,6 @@ export function useDubbing() {
     console.info(`[dubbing:ios] ${message}`);
   };
 
-  const clipDuration = (startTime: number, endTime?: number) => {
-    if (endTime !== undefined && endTime > startTime) {
-      return Math.max(1, endTime - startTime);
-    }
-    return 60;
-  };
-
   const extractErrorMessage = async (
     res: Response,
     fallback: string,
@@ -284,7 +277,6 @@ export function useDubbing() {
       throw new Error("iOS 클라이언트 클립 API 미지원");
     }
 
-    const { extractAudioContext } = await import("@/lib/utils/extractAudioContext");
     const { url: muxUrl, token: muxToken } = await getMuxConfig();
 
     let clipSessionId: string | null = null;
@@ -392,16 +384,26 @@ export function useDubbing() {
       logIOS("clip-session complete success", { clipSessionId });
 
       setStatus("extracting");
-      logIOS("extractAudioContext start", {
-        startTime,
-        duration: clipInfo.durationSec || clipDuration(startTime, endTime),
+      logIOS("clip-session extract-audio start", {
+        clipSessionId,
       });
-      const audioBlob = await extractAudioContext(
-        file,
-        startTime,
-        clipInfo.durationSec || clipDuration(startTime, endTime),
-      );
-      logIOS("extractAudioContext success", { size: audioBlob.size });
+      const extractRes = await fetch(`${muxUrl}/clip-session/extract-audio`, {
+        method: "POST",
+        headers: {
+          ...requestHeaders,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId: clipSessionId,
+        }),
+      });
+      if (!extractRes.ok) {
+        throw new Error(
+          await extractErrorMessage(extractRes, "클립 오디오 추출 실패"),
+        );
+      }
+      const audioBlob = await extractRes.blob();
+      logIOS("clip-session extract-audio success", { size: audioBlob.size });
 
       setStatus("processing");
       const audioFile = new File([audioBlob], "audio.mp3", {
